@@ -31,7 +31,6 @@ func NewDashboard(todos *store.Todo, manage func()) Dashboard {
 
 func (v *Dashboard) Render(c *ui.Context) {
 	state := v.todos.State()
-	Status(c, state.Message, state.Busy)
 	total, completed := counts(state.Items)
 	tk := theme.TokensOf(c)
 	ui.Text(c, "每一件小事，都值得完成。").TextColor(tk.TextSecondary)

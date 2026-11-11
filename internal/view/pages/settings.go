@@ -19,10 +19,16 @@ func NewSettings(preferences *store.Preferences, dataDir string) Settings {
 
 func (v *Settings) Render(c *ui.Context) {
 	state := v.preferences.State()
-	Status(c, state.Message, state.Busy)
 	tk := theme.TokensOf(c)
 	ui.Text(c, "外观").FontSize(18).Bold()
-	ui.Text(c, "主题设置自动保存在本机。").TextColor(tk.TextSecondary)
+	description := "主题设置自动保存在本机。"
+	if state.Busy {
+		description = "正在保存主题设置…"
+	}
+	ui.Row(c).FillWidth().Height(32).Gap(12).Children(func() {
+		ui.Text(c, description).TextColor(tk.TextSecondary)
+		ui.Text(c, state.Message).Grow(1).MinWidth(0).SingleLine().TextColor(tk.Error)
+	})
 	ui.Row(c).Gap(10).Children(func() {
 		for _, option := range []struct{ label, value string }{{"跟随系统", "system"}, {"浅色", "light"}, {"深色", "dark"}} {
 			variant := action.Default

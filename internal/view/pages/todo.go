@@ -25,16 +25,23 @@ func NewTodo(todos *store.Todo) Todo {
 func (v *Todo) Render(c *ui.Context) {
 	state := v.todos.State()
 	add := func() { v.todos.Add(v.title, func() { v.title = "" }) }
-	Status(c, state.Message, state.Busy)
 	total, completed := counts(state.Items)
 	tk := theme.TokensOf(c)
-	ui.Text(c, fmt.Sprintf("共 %d 项 · 待完成 %d 项 · 已完成 %d 项", total, total-completed, completed)).TextColor(tk.TextSecondary)
+	ui.Row(c).FillWidth().Height(32).Gap(12).Children(func() {
+		ui.Text(c, fmt.Sprintf("共 %d 项 · 待完成 %d 项 · 已完成 %d 项", total, total-completed, completed)).TextColor(tk.TextSecondary)
+		ui.Text(c, state.Message).Grow(1).MinWidth(0).SingleLine().TextColor(tk.Error)
+	})
+	addLabel := "添加"
+	if state.Busy {
+		addLabel = "保存中…"
+	}
 	ui.Row(c).FillWidth().Gap(12).Children(func() {
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 			c.Key("new-todo")
 			field.Input(c, &v.title, field.InputProps{Placeholder: "添加任务，按 Enter 保存（1–200 字）"}).Label("任务标题").Disabled(state.Busy).OnSubmit(add)
 		})
-		action.Button(c, "添加", action.ButtonProps{Variant: action.Primary}).Disabled(state.Busy).OnClick(add)
+		c.Key("add-todo")
+		action.Button(c, addLabel, action.ButtonProps{Variant: action.Primary}).Width(96).Disabled(state.Busy).OnClick(add)
 	})
 	c.Key("search")
 	field.Input(c, &v.search, field.InputProps{Placeholder: "搜索任务标题"})
