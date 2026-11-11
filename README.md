@@ -16,6 +16,8 @@
 - Linux 原生运行需要图形会话、GTK 3 和系统图形库；不是 WebKitGTK。各平台要求以 [MyGo 文档](https://github.com/egoist/mygo/tree/main/docs) 为准。
 - VS Code 调试需要 Go 扩展与 Delve。
 
+Linux 启动时会在创建窗口前追加进程内 fontconfig 规则，规避旧版 cairo 将灰度字形误渲染为子像素字形、导致文字忽略主题色的问题（如浅色模式文字发白、泛绿）。规则不修改系统配置，不影响 macOS 和 Windows。实现参考 [sshyard 的修复说明](https://github.com/Licoy/sshyard/commit/ddfb25d35ebfdda5ade2ff6eb587251837ee6f46)；若规则加载失败，启动日志会报告原因。
+
 MyGo、Lobe MyGo 和原生 CLI 的版本固定在 [go.mod](./go.mod)。Lobe MyGo 当前需要 MyGo 的 0.8.4 预发布提交，不能单独降回原模板的 0.8.3。
 
 ## 快速开始

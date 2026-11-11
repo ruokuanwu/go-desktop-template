@@ -3,6 +3,7 @@ module go-desktop-template
 go 1.27.3
 
 require (
+	github.com/ebitengine/purego v0.11.1
 	github.com/egoist/mygo v0.8.4-0.20261108082913-9233663736ca
 	github.com/lobehub/lobe-mygo v0.0.0-20261110162706-5e5fea5ef9e2
 	modernc.org/sqlite v1.62.0
@@ -10,7 +11,6 @@ require (
 
 require (
 	github.com/dustin/go-humanize v1.1.0 // indirect
-	github.com/ebitengine/purego v0.11.1 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect

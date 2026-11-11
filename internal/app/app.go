@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log"
 	"path/filepath"
 
 	"github.com/egoist/mygo"
@@ -10,6 +11,7 @@ import (
 
 	"go-desktop-template/internal/config"
 	"go-desktop-template/internal/db"
+	"go-desktop-template/internal/pkg/gtkfix"
 	"go-desktop-template/internal/pkg/task"
 	"go-desktop-template/internal/repository"
 	"go-desktop-template/internal/service"
@@ -44,6 +46,9 @@ func Run() error {
 		}
 	}()
 	mygo.App.WhenReady(func() {
+		if err := gtkfix.TextColor(); err != nil {
+			log.Printf("apply text color workaround: %v", err)
+		}
 		var window *mygo.Window
 		jobs = task.New(func(publish func()) { window.Update(publish) })
 		todoStore := store.NewTodo(todos, jobs, items)
