@@ -2,16 +2,18 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log"
 	"path/filepath"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"go.uber.org/zap"
 
 	"go-desktop-template/internal/config"
 	"go-desktop-template/internal/db"
 	"go-desktop-template/internal/pkg/gtkfix"
+	"go-desktop-template/internal/pkg/logger"
 	"go-desktop-template/internal/pkg/task"
 	"go-desktop-template/internal/repository"
 	"go-desktop-template/internal/service"
@@ -19,12 +21,19 @@ import (
 	"go-desktop-template/internal/view"
 )
 
-func Run() error {
-	dir, err := config.DataDir()
+func Run(configPath string) (runErr error) {
+	initialConfig, err := config.Load(configPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("load config: %w", err)
 	}
-	database, err := db.Open(filepath.Join(dir, "todos.db"))
+	dir := filepath.Dir(initialConfig.DataDir)
+	log, closeLogger, err := logger.New(initialConfig.Log)
+	if err != nil {
+		return fmt.Errorf("initialize logger: %w", err)
+	}
+	defer func() { runErr = errors.Join(runErr, closeLogger()) }()
+	log.Error("application starting", zap.String("data_dir", dir))
+	database, err := db.Open(initialConfig.DataDir)
 	if err != nil {
 		return err
 	}
@@ -33,10 +42,6 @@ func Run() error {
 	items, err := todos.List(context.Background())
 	if err != nil {
 		return fmt.Errorf("load todos: %w", err)
-	}
-	initialConfig, err := config.Load(dir)
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
 	}
 	var jobs *task.Task
 	defer func() {
@@ -47,13 +52,13 @@ func Run() error {
 	}()
 	mygo.App.WhenReady(func() {
 		if err := gtkfix.TextColor(); err != nil {
-			log.Printf("apply text color workaround: %v", err)
+			log.Warn("apply text color workaround", zap.Error(err))
 		}
 		var window *mygo.Window
 		jobs = task.New(func(publish func()) { window.Update(publish) })
 		todoStore := store.NewTodo(todos, jobs, items)
 		configStore := store.NewConfig(jobs, initialConfig, func(value config.Config) error {
-			return config.Save(dir, value)
+			return config.Save(configPath, value)
 		})
 		screen := view.New(todoStore, configStore, dir)
 		window = mygo.NewWindow(mygo.WindowOptions{

@@ -6,6 +6,9 @@ require (
 	github.com/ebitengine/purego v0.11.1
 	github.com/egoist/mygo v0.8.4-0.20261108082913-9233663736ca
 	github.com/lobehub/lobe-mygo v0.0.0-20261110162706-5e5fea5ef9e2
+	github.com/spf13/cobra v1.10.1
+	go.uber.org/zap v1.27.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	modernc.org/sqlite v1.62.0
 )
 
@@ -13,9 +16,12 @@ require (
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
+	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect

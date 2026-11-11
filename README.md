@@ -30,7 +30,9 @@ make dev
 也可以直接运行：
 
 ```bash
-go run .
+go run ./cmd
+# 指定配置文件（文件必须存在）
+go run ./cmd -p /path/to/config.json
 ```
 
 构建本机桌面程序：
@@ -58,20 +60,36 @@ Linux 产物位于 `build/linux-amd64/`（架构随本机变化），包含可�
 
 默认目录为 `os.UserConfigDir()/go-desktop-template`：Linux 通常为 `~/.config/go-desktop-template`，macOS 为 `~/Library/Application Support/go-desktop-template`，Windows 为 `%AppData%/go-desktop-template`。
 
-- `todos.db`：任务数据。
-- `config.json`：应用配置，当前包含外观设置；手动修改后下次启动生效。仅在此文件不存在时兼容读取旧的 `preferences.json`，界面修改后统一保存到 `config.json`。
-- 可通过 `TODO_DATA_DIR` 覆盖目录；启动时自动创建。
+- 配置路径由 Cobra 参数 `-p` / `--config-path` 指定，默认是上述目录下的 `config.json`。加载和保存始终使用同一路径；相对配置路径基于启动工作目录。
+- 默认配置文件不存在时使用默认配置；显式指定的配置文件不存在时启动报错。不再读取旧的 `preferences.json`。
+- `data_dir` 保留原字段名，但现在表示数据库文件路径：绝对路径直接使用；为空或非绝对路径时，统一使用 `os.UserConfigDir()/go-desktop-template/data.db`，不拼接相对路径。不读取 `TODO_DATA_DIR` 环境变量。
+- 数据库父目录启动时自动创建。旧的 `todos.db` 不会自动迁移；如需保留任务，可在关闭程序后将其复制为 `data.db`，或将 `data_dir` 设置为旧数据库的绝对路径。旧配置中指向目录的 `data_dir` 也需要修改为数据库文件路径。
 
-```bash
-TODO_DATA_DIR=/tmp/todo-desktop-demo go run .
+日志使用 Zap，输出 JSON 到日志目录的 `app.log`。配置示例（空 `data_dir` 使用默认数据库路径；其余字段如下为默认值）：
+
+```json
+{
+  "data_dir": "",
+  "theme": "system",
+  "log": {
+    "dir": "logs",
+    "max_age": 7,
+    "level": "info"
+  }
+}
 ```
+
+- `dir`：日志目录；相对路径基于数据库所在目录，也支持绝对路径。
+- `max_age`：轮转日志保留天数，`0` 表示不按时间清理。单文件达到 100 MB 时轮转并压缩，过期备份在轮转时异步清理；当前日志不按时间删除。
+- `level`：支持 `debug`、`info`、`warn`、`error`、`dpanic`、`panic`、`fatal`。设为 `debug` 可记录启动时的 `application starting` 日志；默认 `info` 会过滤该日志。
+- 界面保存外观时保留日志配置；日志配置修改后重启生效。
 
 关闭程序后复制数据目录即可备份；恢复时保持程序关闭。程序不会把数据库放进安装目录，也不需要网络连接。
 
 ## 目录结构
 
 ```text
-main.go                 启动入口
+cmd/main.go             Cobra 启动入口与配置路径参数
 internal/app/           依赖组装、原生窗口创建及资源释放
 internal/store/         任务和偏好设置的共享状态与动作
 internal/pkg/asyncjobs/ 后台执行、结果发布及取消等待
@@ -84,6 +102,7 @@ internal/repository/    参数化 SQLite CRUD
 internal/model/         任务模型
 internal/db/            SQLite 连接与自动建表
 internal/config/        数据目录及应用配置加载、校验、保存
+internal/pkg/logger/    Zap 文件日志、大小轮转与备份保留
 resources/              桌面图标
 .agents/skills/          原生开发与组件文档技能
 .vscode/launch.json     原生 Go 调试配置

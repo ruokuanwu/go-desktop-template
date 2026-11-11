@@ -3,5 +3,6 @@
   "slug": "todo-desktop",
   "identifier": "com.example.tododesktop",
   "version": "0.1.0",
-  "out": "build"
+  "out": "build",
+  "main": "./cmd"
 }

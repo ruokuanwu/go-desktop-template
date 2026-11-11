@@ -31,7 +31,8 @@ func (s *Config) SetTheme(theme string) {
 		return
 	}
 	s.state.Busy, s.state.Message = true, ""
-	config := config.Config{Theme: theme}
+	config := s.state.Value
+	config.Theme = theme
 	s.jobs.Run(func(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
