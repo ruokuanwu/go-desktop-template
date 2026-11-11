@@ -34,9 +34,9 @@ func Run() error {
 	if err != nil {
 		return fmt.Errorf("load todos: %w", err)
 	}
-	preferences, err := config.LoadPreferences(dir)
+	initialConfig, err := config.Load(dir)
 	if err != nil {
-		return fmt.Errorf("load preferences: %w", err)
+		return fmt.Errorf("load config: %w", err)
 	}
 	var jobs *task.Task
 	defer func() {
@@ -52,10 +52,10 @@ func Run() error {
 		var window *mygo.Window
 		jobs = task.New(func(publish func()) { window.Update(publish) })
 		todoStore := store.NewTodo(todos, jobs, items)
-		preferenceStore := store.NewPreferences(jobs, preferences, func(p config.Preferences) error {
-			return config.SavePreferences(dir, p)
+		configStore := store.NewConfig(jobs, initialConfig, func(value config.Config) error {
+			return config.Save(dir, value)
 		})
-		screen := view.New(todoStore, preferenceStore, dir)
+		screen := view.New(todoStore, configStore, dir)
 		window = mygo.NewWindow(mygo.WindowOptions{
 			Title: "Todo Desktop", Width: 1000, Height: 720,
 			MinWidth: 720, MinHeight: 520,

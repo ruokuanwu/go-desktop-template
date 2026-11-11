@@ -59,7 +59,7 @@ Linux 产物位于 `build/linux-amd64/`（架构随本机变化），包含可�
 默认目录为 `os.UserConfigDir()/go-desktop-template`：Linux 通常为 `~/.config/go-desktop-template`，macOS 为 `~/Library/Application Support/go-desktop-template`，Windows 为 `%AppData%/go-desktop-template`。
 
 - `todos.db`：任务数据。
-- `preferences.json`：外观偏好。
+- `config.json`：应用配置，当前包含外观设置；手动修改后下次启动生效。仅在此文件不存在时兼容读取旧的 `preferences.json`，界面修改后统一保存到 `config.json`。
 - 可通过 `TODO_DATA_DIR` 覆盖目录；启动时自动创建。
 
 ```bash
@@ -83,7 +83,7 @@ internal/service/       业务逻辑、数据访问接口
 internal/repository/    参数化 SQLite CRUD
 internal/model/         任务模型
 internal/db/            SQLite 连接与自动建表
-internal/config/        数据目录及偏好设置加载、校验、保存
+internal/config/        数据目录及应用配置加载、校验、保存
 resources/              桌面图标
 .agents/skills/          原生开发与组件文档技能
 .vscode/launch.json     原生 Go 调试配置

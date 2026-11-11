@@ -7,49 +7,52 @@ import (
 	"path/filepath"
 )
 
-type Preferences struct {
-	Appearance string `json:"appearance"`
+type Config struct {
+	Theme string `json:"theme"`
 }
 
-func LoadPreferences(dir string) (Preferences, error) {
-	p := Preferences{Appearance: "system"}
-	data, err := os.ReadFile(filepath.Join(dir, "preferences.json"))
+func Load(dir string) (Config, error) {
+	config := Config{Theme: "system"}
+	data, err := os.ReadFile(filepath.Join(dir, "config.json"))
 	if os.IsNotExist(err) {
-		return p, nil
+		data, err = os.ReadFile(filepath.Join(dir, "preferences.json"))
+	}
+	if os.IsNotExist(err) {
+		return config, nil
 	}
 	if err != nil {
-		return p, err
+		return config, err
 	}
-	if err := json.Unmarshal(data, &p); err != nil {
-		return p, err
+	if err := json.Unmarshal(data, &config); err != nil {
+		return config, err
 	}
-	if err := validatePreferences(p); err != nil {
-		return p, err
+	if err := validate(config); err != nil {
+		return config, err
 	}
-	return p, nil
+	return config, nil
 }
 
-func SavePreferences(dir string, p Preferences) error {
-	if err := validatePreferences(p); err != nil {
+func Save(dir string, config Config) error {
+	if err := validate(config); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(p, "", "  ")
+	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return err
 	}
-	temp := filepath.Join(dir, "preferences.json.tmp")
+	temp := filepath.Join(dir, "config.json.tmp")
 	if err := os.WriteFile(temp, data, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(temp, filepath.Join(dir, "preferences.json"))
+	return os.Rename(temp, filepath.Join(dir, "config.json"))
 }
 
-func validatePreferences(p Preferences) error {
-	switch p.Appearance {
+func validate(config Config) error {
+	switch config.Theme {
 	case "system", "light", "dark":
 		return nil
 	default:
-		return fmt.Errorf("invalid appearance: %s", p.Appearance)
+		return fmt.Errorf("invalid theme: %s", config.Theme)
 	}
 }
 

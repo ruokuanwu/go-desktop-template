@@ -8,17 +8,17 @@ import (
 	"go-desktop-template/internal/store"
 )
 
-type Settings struct {
-	preferences *store.Preferences
-	dataDir     string
+type Config struct {
+	config  *store.Config
+	dataDir string
 }
 
-func NewSettings(preferences *store.Preferences, dataDir string) Settings {
-	return Settings{preferences: preferences, dataDir: dataDir}
+func NewConfig(config *store.Config, dataDir string) Config {
+	return Config{config: config, dataDir: dataDir}
 }
 
-func (v *Settings) Render(c *ui.Context) {
-	state := v.preferences.State()
+func (v *Config) Render(c *ui.Context) {
+	state := v.config.State()
 	tk := theme.TokensOf(c)
 	ui.Text(c, "外观").FontSize(18).Bold()
 	description := "主题设置自动保存在本机。"
@@ -32,11 +32,11 @@ func (v *Settings) Render(c *ui.Context) {
 	ui.Row(c).Gap(10).Children(func() {
 		for _, option := range []struct{ label, value string }{{"跟随系统", "system"}, {"浅色", "light"}, {"深色", "dark"}} {
 			variant := action.Default
-			if state.Value.Appearance == option.value {
+			if state.Value.Theme == option.value {
 				variant = action.Primary
 			}
 			c.Key(option.value)
-			action.Button(c, option.label, action.ButtonProps{Variant: variant}).Disabled(state.Busy).OnClick(func() { v.preferences.SetAppearance(option.value) })
+			action.Button(c, option.label, action.ButtonProps{Variant: variant}).Disabled(state.Busy).OnClick(func() { v.config.SetTheme(option.value) })
 		}
 	})
 	ui.Text(c, "本地数据目录").FontSize(18).Bold()
