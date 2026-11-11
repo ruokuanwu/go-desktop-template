@@ -17,12 +17,12 @@ type View struct {
 	configPage pages.Config
 }
 
-func New(todos *store.Todo, config *store.Config, dataDir string) *View {
+func New(todos *store.Todo, config *store.Config) *View {
 	v := &View{
 		config:     config,
 		page:       "任务",
 		tasks:      pages.NewTodo(todos),
-		configPage: pages.NewConfig(config, dataDir),
+		configPage: pages.NewConfig(config),
 	}
 	v.dashboard = pages.NewDashboard(todos, func() { v.page = "任务" })
 	return v

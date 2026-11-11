@@ -9,12 +9,11 @@ import (
 )
 
 type Config struct {
-	config  *store.Config
-	dataDir string
+	config *store.Config
 }
 
-func NewConfig(config *store.Config, dataDir string) Config {
-	return Config{config: config, dataDir: dataDir}
+func NewConfig(config *store.Config) Config {
+	return Config{config: config}
 }
 
 func (v *Config) Render(c *ui.Context) {
@@ -40,7 +39,7 @@ func (v *Config) Render(c *ui.Context) {
 		}
 	})
 	ui.Text(c, "本地数据目录").FontSize(18).Bold()
-	ui.Text(c, v.dataDir).Wrap().TextColor(tk.TextSecondary)
+	ui.Text(c, state.Value.DataDir).Wrap().TextColor(tk.TextSecondary)
 	ui.Text(c, "任务保存在 todos.db；关闭程序后可复制此文件备份。").Wrap().TextColor(tk.TextSecondary)
 	ui.Text(c, "纯 Go 原生界面，无 WebView，无本地 HTTP 服务。").Wrap().TextColor(tk.TextSecondary)
 }

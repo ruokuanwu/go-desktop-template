@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -26,13 +25,14 @@ func Run(configPath string) (runErr error) {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	dir := filepath.Dir(initialConfig.DataDir)
 	log, closeLogger, err := logger.New(initialConfig.Log)
 	if err != nil {
 		return fmt.Errorf("initialize logger: %w", err)
 	}
 	defer func() { runErr = errors.Join(runErr, closeLogger()) }()
-	log.Error("application starting", zap.String("data_dir", dir))
+	restoreLogger := zap.ReplaceGlobals(log)
+	defer restoreLogger()
+	zap.L().Error("application starting", zap.String("data_dir", initialConfig.DataDir))
 	database, err := db.Open(initialConfig.DataDir)
 	if err != nil {
 		return err
@@ -52,7 +52,7 @@ func Run(configPath string) (runErr error) {
 	}()
 	mygo.App.WhenReady(func() {
 		if err := gtkfix.TextColor(); err != nil {
-			log.Warn("apply text color workaround", zap.Error(err))
+			zap.L().Warn("apply text color workaround", zap.Error(err))
 		}
 		var window *mygo.Window
 		jobs = task.New(func(publish func()) { window.Update(publish) })
@@ -60,7 +60,7 @@ func Run(configPath string) (runErr error) {
 		configStore := store.NewConfig(jobs, initialConfig, func(value config.Config) error {
 			return config.Save(configPath, value)
 		})
-		screen := view.New(todoStore, configStore, dir)
+		screen := view.New(todoStore, configStore)
 		window = mygo.NewWindow(mygo.WindowOptions{
 			Title: "Todo Desktop", Width: 1000, Height: 720,
 			MinWidth: 720, MinHeight: 520,
