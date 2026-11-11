@@ -70,14 +70,18 @@ TODO_DATA_DIR=/tmp/todo-desktop-demo go run .
 
 ```text
 main.go                 启动入口
-internal/app/           依赖组装、初始化及资源释放
-internal/desktop/       原生窗口与关闭事件
-internal/view/          Lobe MyGo 页面、界面状态及外观设置
+internal/app/           依赖组装、原生窗口创建及资源释放
+internal/store/         任务和偏好设置的共享状态与动作
+internal/pkg/asyncjobs/ 后台执行、结果发布及取消等待
+internal/view/          根视图、主题应用及页面组合
+internal/view/layouts/  侧栏与内容布局
+internal/view/pages/    业务页面及输入、搜索、筛选等局部状态
+internal/view/components/  任务行等展示组件
 internal/service/       业务逻辑、数据访问接口
 internal/repository/    参数化 SQLite CRUD
 internal/model/         任务模型
 internal/db/            SQLite 连接与自动建表
-internal/config/        数据目录配置
+internal/config/        数据目录及偏好设置加载、校验、保存
 resources/              桌面图标
 .agents/skills/          原生开发与组件文档技能
 .vscode/launch.json     原生 Go 调试配置
@@ -86,4 +90,6 @@ deploy/test/            预留测试渠道分发目录
 deploy/prod/            预留正式渠道分发目录
 ```
 
-界面直接调用 service，不包含 HTTP controller 或 IPC 绑定层。后台任务使用可取消 context，结果通过 `Window.Update` 在 UI 线程发布；退出时等待后台任务结束后关闭数据库。
+应用启动层创建并注入 Store 实例，不使用包级全局状态或 Controller 层。业务页面直接使用构造时注入的 Store；根视图只负责主题、导航和页面组合，可复用组件通过参数和回调交互。任务 Store 调用 service，偏好设置 Store 调用配置保存，两者的忙碌状态和错误独立，保存外观不会查询任务。搜索、筛选和输入内容由任务页面持有，切换页面后保留。
+
+后台任务使用可取消 context，结果通过启动层注入的 `Window.Update` 在 UI 线程发布；关闭窗口后忽略待发布结果，退出时等待后台任务结束后关闭数据库。
