@@ -16,19 +16,19 @@ type Repository interface {
 	Delete(ctx context.Context, id int64) error
 }
 
-type Todos struct {
+type Todo struct {
 	repo Repository
 }
 
-func New(repo Repository) *Todos {
-	return &Todos{repo: repo}
+func NewTodo(repo Repository) *Todo {
+	return &Todo{repo: repo}
 }
 
-func (s *Todos) List(ctx context.Context) ([]model.Todo, error) {
+func (s *Todo) List(ctx context.Context) ([]model.Todo, error) {
 	return s.repo.List(ctx)
 }
 
-func (s *Todos) Create(ctx context.Context, title string) (model.Todo, error) {
+func (s *Todo) Create(ctx context.Context, title string) (model.Todo, error) {
 	title = strings.TrimSpace(title)
 	length := utf8.RuneCountInString(title)
 	if !utf8.ValidString(title) || length < 1 || length > 200 {
@@ -37,10 +37,10 @@ func (s *Todos) Create(ctx context.Context, title string) (model.Todo, error) {
 	return s.repo.Create(ctx, title)
 }
 
-func (s *Todos) SetCompleted(ctx context.Context, id int64, completed bool) error {
+func (s *Todo) SetCompleted(ctx context.Context, id int64, completed bool) error {
 	return s.repo.SetCompleted(ctx, id, completed)
 }
 
-func (s *Todos) Delete(ctx context.Context, id int64) error {
+func (s *Todo) Delete(ctx context.Context, id int64) error {
 	return s.repo.Delete(ctx, id)
 }

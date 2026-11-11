@@ -11,15 +11,15 @@ import (
 
 var ErrNotFound = errors.New("todo not found")
 
-type Todos struct {
+type Todo struct {
 	db *sql.DB
 }
 
-func New(db *sql.DB) *Todos {
-	return &Todos{db: db}
+func NewTodo(db *sql.DB) *Todo {
+	return &Todo{db: db}
 }
 
-func (r *Todos) List(ctx context.Context) ([]model.Todo, error) {
+func (r *Todo) List(ctx context.Context) ([]model.Todo, error) {
 	rows, err := r.db.QueryContext(ctx, "SELECT id, title, completed FROM todos ORDER BY id")
 	if err != nil {
 		return nil, err
@@ -40,7 +40,7 @@ func (r *Todos) List(ctx context.Context) ([]model.Todo, error) {
 	return todos, nil
 }
 
-func (r *Todos) Create(ctx context.Context, title string) (model.Todo, error) {
+func (r *Todo) Create(ctx context.Context, title string) (model.Todo, error) {
 	result, err := r.db.ExecContext(ctx, "INSERT INTO todos (title, completed) VALUES (?, ?)", title, false)
 	if err != nil {
 		return model.Todo{}, err
@@ -52,12 +52,12 @@ func (r *Todos) Create(ctx context.Context, title string) (model.Todo, error) {
 	return model.Todo{ID: id, Title: title, Completed: false}, nil
 }
 
-func (r *Todos) SetCompleted(ctx context.Context, id int64, completed bool) error {
+func (r *Todo) SetCompleted(ctx context.Context, id int64, completed bool) error {
 	result, err := r.db.ExecContext(ctx, "UPDATE todos SET completed = ? WHERE id = ?", completed, id)
 	return checkAffected(result, err, id)
 }
 
-func (r *Todos) Delete(ctx context.Context, id int64) error {
+func (r *Todo) Delete(ctx context.Context, id int64) error {
 	result, err := r.db.ExecContext(ctx, "DELETE FROM todos WHERE id = ?", id)
 	return checkAffected(result, err, id)
 }

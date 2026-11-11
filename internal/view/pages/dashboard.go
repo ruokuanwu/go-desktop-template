@@ -21,11 +21,11 @@ func counts(items []model.Todo) (total, completed int) {
 }
 
 type Dashboard struct {
-	todos  *store.Todos
+	todos  *store.Todo
 	manage func()
 }
 
-func NewDashboard(todos *store.Todos, manage func()) Dashboard {
+func NewDashboard(todos *store.Todo, manage func()) Dashboard {
 	return Dashboard{todos: todos, manage: manage}
 }
 

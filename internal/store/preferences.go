@@ -3,7 +3,7 @@ package store
 import (
 	"context"
 
-	"go-desktop-template/internal/pkg/asyncjobs"
+	"go-desktop-template/internal/pkg/task"
 
 	"go-desktop-template/internal/config"
 )
@@ -15,12 +15,12 @@ type PreferenceState struct {
 }
 
 type Preferences struct {
-	jobs  *asyncjobs.AsyncJobs
+	jobs  *task.Task
 	save  func(config.Preferences) error
 	state PreferenceState
 }
 
-func NewPreferences(jobs *asyncjobs.AsyncJobs, initial config.Preferences, save func(config.Preferences) error) *Preferences {
+func NewPreferences(jobs *task.Task, initial config.Preferences, save func(config.Preferences) error) *Preferences {
 	return &Preferences{jobs: jobs, save: save, state: PreferenceState{Value: initial}}
 }
 

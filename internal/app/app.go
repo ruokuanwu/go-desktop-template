@@ -10,7 +10,7 @@ import (
 
 	"go-desktop-template/internal/config"
 	"go-desktop-template/internal/db"
-	"go-desktop-template/internal/pkg/asyncjobs"
+	"go-desktop-template/internal/pkg/task"
 	"go-desktop-template/internal/repository"
 	"go-desktop-template/internal/service"
 	"go-desktop-template/internal/store"
@@ -27,7 +27,7 @@ func Run() error {
 		return err
 	}
 	defer database.Close()
-	todos := service.New(repository.New(database))
+	todos := service.NewTodo(repository.NewTodo(database))
 	items, err := todos.List(context.Background())
 	if err != nil {
 		return fmt.Errorf("load todos: %w", err)
@@ -36,7 +36,7 @@ func Run() error {
 	if err != nil {
 		return fmt.Errorf("load preferences: %w", err)
 	}
-	var jobs *asyncjobs.AsyncJobs
+	var jobs *task.Task
 	defer func() {
 		if jobs != nil {
 			jobs.Close()
@@ -45,8 +45,8 @@ func Run() error {
 	}()
 	mygo.App.WhenReady(func() {
 		var window *mygo.Window
-		jobs = asyncjobs.New(func(publish func()) { window.Update(publish) })
-		todoStore := store.NewTodos(todos, jobs, items)
+		jobs = task.New(func(publish func()) { window.Update(publish) })
+		todoStore := store.NewTodo(todos, jobs, items)
 		preferenceStore := store.NewPreferences(jobs, preferences, func(p config.Preferences) error {
 			return config.SavePreferences(dir, p)
 		})

@@ -12,16 +12,16 @@ import (
 type View struct {
 	preferences *store.Preferences
 	page        string
-	tasks       pages.Tasks
+	tasks       pages.Todo
 	dashboard   pages.Dashboard
 	settings    pages.Settings
 }
 
-func New(todos *store.Todos, preferences *store.Preferences, dataDir string) *View {
+func New(todos *store.Todo, preferences *store.Preferences, dataDir string) *View {
 	v := &View{
 		preferences: preferences,
 		page:        "任务",
-		tasks:       pages.NewTasks(todos),
+		tasks:       pages.NewTodo(todos),
 		settings:    pages.NewSettings(preferences, dataDir),
 	}
 	v.dashboard = pages.NewDashboard(todos, func() { v.page = "任务" })
