@@ -5,19 +5,16 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/ui"
 	"go.uber.org/zap"
 
 	"go-desktop-template/internal/config"
 	"go-desktop-template/internal/db"
-	"go-desktop-template/internal/pkg/gtkfix"
+	"go-desktop-template/internal/desktop"
 	"go-desktop-template/internal/pkg/logger"
 	"go-desktop-template/internal/pkg/task"
 	"go-desktop-template/internal/repository"
 	"go-desktop-template/internal/service"
 	"go-desktop-template/internal/store"
-	"go-desktop-template/internal/view"
 )
 
 func Run(configPath string) (runErr error) {
@@ -43,30 +40,22 @@ func Run(configPath string) (runErr error) {
 	if err != nil {
 		return fmt.Errorf("load todos: %w", err)
 	}
-	var jobs *task.Task
+	var update func(func())
+	jobs := task.New(func(publish func()) { update(publish) })
 	defer func() {
-		if jobs != nil {
-			jobs.Close()
-			jobs.Wait()
-		}
+		jobs.Close()
+		jobs.Wait()
 	}()
-	mygo.App.WhenReady(func() {
-		if err := gtkfix.TextColor(); err != nil {
-			zap.L().Warn("apply text color workaround", zap.Error(err))
-		}
-		var window *mygo.Window
-		jobs = task.New(func(publish func()) { window.Update(publish) })
-		todoStore := store.NewTodo(todos, jobs, items)
-		configStore := store.NewConfig(jobs, initialConfig, func(value config.Config) error {
-			return config.Save(configPath, value)
-		})
-		screen := view.New(todoStore, configStore)
-		window = mygo.NewWindow(mygo.WindowOptions{
-			Title: "Todo Desktop", Width: 1000, Height: 720,
-			MinWidth: 720, MinHeight: 520,
-			StateKey: "main", Content: ui.View(screen.Render),
-		})
-		window.OnClosed(jobs.Close)
+	todoStore := store.NewTodo(todos, jobs, items)
+	configStore := store.NewConfig(jobs, initialConfig, func(value config.Config) error {
+		return config.Save(configPath, value)
 	})
-	return mygo.App.Run()
+	return desktop.Run(desktop.Options{
+		Todos:  todoStore,
+		Config: configStore,
+		Lifecycle: desktop.Lifecycle{
+			Ready:  func(publish func(func())) { update = publish },
+			Closed: jobs.Close,
+		},
+	})
 }

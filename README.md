@@ -10,6 +10,8 @@
 - 任务：添加、标题搜索、状态筛选、切换完成状态、删除。
 - SQLite 本地持久化；标题去除首尾空白后为 1–200 个 Unicode 字符。
 - 浅色、深色、跟随系统，外观设置本地保存。
+- 系统托盘提供“显示”和“退出”；“显示”恢复并聚焦原窗口。
+- 设置页可开启“关闭到系统托盘”，默认关闭；开启后关闭窗口仅隐藏，托盘“退出”始终结束程序。设置保存成功后立即生效，重启后保留。
 - 保存操作在后台执行；任务页通过固定宽度按钮显示保存状态，设置页就地更新保存提示，错误在各页固定高度区域显示，不插入临时状态行。
 
 ## 环境要求
@@ -17,6 +19,7 @@
 - Go 1.27.3+，Make（可选）。不需要 Bun、Node.js 或 CGO。
 - Linux 原生运行需要图形会话、GTK 3 和系统图形库；不是 WebKitGTK。各平台要求以 [MyGo 文档](https://github.com/egoist/mygo/tree/main/docs) 为准。
 - VS Code 调试需要 Go 扩展与 Delve。
+- Linux 托盘需要 AppIndicator 支持及提供托盘的桌面环境；GNOME 通常需要 AppIndicator 扩展。托盘创建失败时记录日志、在设置页提示并禁用开关，关闭窗口仍正常退出。托盘创建成功不保证桌面面板显示图标，启用“关闭到系统托盘”前应确认托盘菜单可用。
 
 Linux 启动时会在创建窗口前追加进程内 fontconfig 规则，规避旧版 cairo 将灰度字形误渲染为子像素字形、导致文字忽略主题色的问题（如浅色模式文字发白、泛绿）。规则不修改系统配置，不影响 macOS 和 Windows。实现参考 [sshyard 的修复说明](https://github.com/Licoy/sshyard/commit/ddfb25d35ebfdda5ade2ff6eb587251837ee6f46)；若规则加载失败，启动日志会报告原因。
 
@@ -73,6 +76,7 @@ Linux 产物位于 `build/linux-amd64/`（架构随本机变化），包含可�
 {
   "data_dir": "",
   "theme": "system",
+  "close_to_tray": false,
   "log": {
     "dir": "logs",
     "max_age": 7,
@@ -92,7 +96,8 @@ Linux 产物位于 `build/linux-amd64/`（架构随本机变化），包含可�
 
 ```text
 cmd/main.go             Cobra 启动入口与配置路径参数
-internal/app/           依赖组装、原生窗口创建及资源释放
+internal/app/           配置、日志、数据库与 Service 组装及资源释放
+internal/desktop/       桌面运行入口、主窗口生命周期与系统托盘
 internal/store/         任务和偏好设置的共享状态与动作
 internal/pkg/asyncjobs/ 后台执行、结果发布及取消等待
 internal/view/          根视图、主题应用及页面组合
@@ -113,6 +118,6 @@ deploy/test/            预留测试渠道分发目录
 deploy/prod/            预留正式渠道分发目录
 ```
 
-应用启动层创建并注入 Store 实例，业务状态不使用包级全局变量，也不设置 Controller 层；日志使用上述全局默认实例。业务页面直接使用构造时注入的 Store；根视图只负责主题、导航和页面组合，可复用组件通过参数和回调交互。任务 Store 调用 service，偏好设置 Store 调用配置保存，两者的忙碌状态和错误独立，保存外观不会查询任务。搜索、筛选和输入内容由任务页面持有，切换页面后保留。
+应用启动层初始化配置、日志、数据库、Service、后台任务与 Store，加载初始任务后调用 `desktop.Run(desktop.Options{...})`；桌面层通过 `Options` 接收 Store 和窗口生命周期回调，创建主窗口并统一协调隐藏与退出，不依赖 Service，也不负责加载或保存配置文件。`internal/desktop/desktop.go` 管理桌面运行状态及窗口生命周期，`internal/desktop/tray.go` 通过内部 `trayOptions` 接收显示与退出回调，只创建托盘和菜单，不读取 Store。业务状态不使用包级全局变量，也不设置 Controller 层；日志使用上述全局默认实例。业务页面直接使用构造时注入的 Store；根视图只负责主题、导航和页面组合，可复用组件通过参数和回调交互。任务 Store 调用 service，偏好设置 Store 调用配置保存，两者的忙碌状态和错误独立，保存外观不会查询任务。搜索、筛选和输入内容由任务页面持有，切换页面后保留。
 
-后台任务使用可取消 context，结果通过启动层注入的 `Window.Update` 在 UI 线程发布；关闭窗口后忽略待发布结果，退出时等待后台任务结束后关闭数据库。
+后台任务使用可取消 context；应用层先创建任务与 Store，桌面窗口创建后通过 `Lifecycle.Ready` 绑定 `Window.Update`，在界面接收输入前完成结果发布回调的初始化。`Lifecycle.Closed` 通知应用层取消后台任务；隐藏到托盘时不取消，真正关闭窗口后忽略待发布结果，桌面运行结束后由应用层等待后台任务结束，再关闭数据库和日志。

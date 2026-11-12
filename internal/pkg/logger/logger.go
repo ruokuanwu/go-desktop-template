@@ -20,7 +20,7 @@ func New(cfg config.LogConfig) (*zap.Logger, func() error, error) {
 	}
 	dir := cfg.LogDir
 	if !filepath.IsAbs(dir) {
-		return nil, nil, fmt.Errorf("log dir is not absolute: %w", dir)
+		return nil, nil, fmt.Errorf("log dir is not absolute: %s", dir)
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, nil, fmt.Errorf("create log directory: %w", err)

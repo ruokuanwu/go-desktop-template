@@ -3,6 +3,7 @@ package pages
 import (
 	"github.com/egoist/mygo/ui"
 	"github.com/lobehub/lobe-mygo/pkg/action"
+	"github.com/lobehub/lobe-mygo/pkg/choice"
 	"github.com/lobehub/lobe-mygo/pkg/theme"
 
 	"go-desktop-template/internal/store"
@@ -20,9 +21,9 @@ func (v *Config) Render(c *ui.Context) {
 	state := v.config.State()
 	tk := theme.TokensOf(c)
 	ui.Text(c, "外观").FontSize(18).Bold()
-	description := "主题设置自动保存在本机。"
+	description := "设置自动保存在本机。"
 	if state.Busy {
-		description = "正在保存主题设置…"
+		description = "正在保存设置…"
 	}
 	ui.Row(c).FillWidth().Height(32).Gap(12).Children(func() {
 		ui.Text(c, description).TextColor(tk.TextSecondary)
@@ -38,6 +39,16 @@ func (v *Config) Render(c *ui.Context) {
 			action.Button(c, option.label, action.ButtonProps{Variant: variant}).Disabled(state.Busy).OnClick(func() { v.config.SetTheme(option.value) })
 		}
 	})
+	ui.Text(c, "窗口行为").FontSize(18).Bold()
+	ui.Row(c).Gap(12).Children(func() {
+		enabled := state.Value.CloseToTray
+		choice.Switch(c.Key("close-to-tray"), &enabled, choice.SwitchProps{}).
+			Label("关闭到系统托盘").Disabled(state.Busy || state.TrayMessage != "").
+			OnClick(func() { v.config.SetCloseToTray(enabled) })
+		ui.Text(c, "关闭到系统托盘")
+	})
+	ui.Text(c, "关闭窗口后继续在后台运行，可从托盘显示或退出。").Wrap().TextColor(tk.TextSecondary)
+	ui.Text(c, state.TrayMessage).Wrap().TextColor(tk.Error)
 	ui.Text(c, "本地数据目录").FontSize(18).Bold()
 	ui.Text(c, state.Value.DataDir).Wrap().TextColor(tk.TextSecondary)
 	ui.Text(c, "任务保存在 todos.db；关闭程序后可复制此文件备份。").Wrap().TextColor(tk.TextSecondary)

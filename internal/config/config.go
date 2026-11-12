@@ -10,9 +10,10 @@ import (
 )
 
 type Config struct {
-	DataDir string    `json:"data_dir"`
-	Theme   string    `json:"theme"`
-	Log     LogConfig `json:"log"`
+	DataDir     string    `json:"data_dir"`
+	Theme       string    `json:"theme"`
+	CloseToTray bool      `json:"close_to_tray"`
+	Log         LogConfig `json:"log"`
 }
 
 type LogConfig struct {
