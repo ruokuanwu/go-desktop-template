@@ -1,6 +1,8 @@
 # Todo Desktop
 
-使用 MyGo + Lobe MyGo 构建的本地原生桌面任务程序。界面由 Go 在 GPU 上绘制，无 WebView、JavaScript、HTTP 服务或前端构建步骤。
+使用 MyGo + Lobe MyGo 构建的本地原生桌面任务程序。界面由 Go 绘制，默认使用 CPU/内存渲染，无 WebView、JavaScript、HTTP 服务或前端构建步骤。
+
+程序启动时，若未设置 `MYGO_GPU`，自动设为 `0`，以减少小程序的图形驱动内存开销；开发运行与打包产物均生效，从桌面图标启动也无需额外配置。显式设置的环境变量优先，例如 `MYGO_GPU=1 ./build/linux-amd64/todo-desktop` 可强制尝试 OpenGL 渲染。CPU 渲染可能增加滚动、动画和大窗口下的 CPU 开销。
 
 ## 功能
 

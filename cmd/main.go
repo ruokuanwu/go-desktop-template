@@ -35,6 +35,11 @@ func main() {
 					return fmt.Errorf("config path: %w", err)
 				}
 			}
+			if _, ok := os.LookupEnv("MYGO_GPU"); !ok {
+				if err := os.Setenv("MYGO_GPU", "0"); err != nil {
+					return fmt.Errorf("set default renderer: %w", err)
+				}
+			}
 			return app.Run(path)
 		},
 	}
