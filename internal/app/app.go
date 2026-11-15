@@ -11,10 +11,8 @@ import (
 	"go-desktop-template/internal/db"
 	"go-desktop-template/internal/desktop"
 	"go-desktop-template/internal/pkg/logger"
-	"go-desktop-template/internal/pkg/task"
 	"go-desktop-template/internal/repository"
 	"go-desktop-template/internal/service"
-	"go-desktop-template/internal/store"
 )
 
 func Run(configPath string) (runErr error) {
@@ -40,29 +38,12 @@ func Run(configPath string) (runErr error) {
 	if err != nil {
 		return fmt.Errorf("load todos: %w", err)
 	}
-	var update func(func())
-	jobs := task.New(func(publish func()) { update(publish) })
-	defer func() {
-		jobs.Close()
-		jobs.Wait()
-	}()
-	todoStore := store.NewTodo(todos, func(publish func()) { update(publish) }, items)
-	defer func() {
-		todoStore.Close()
-		todoStore.Wait()
-	}()
-	configStore := store.NewConfig(jobs, initialConfig, func(value config.Config) error {
-		return config.Save(configPath, value)
-	})
 	return desktop.Run(desktop.Options{
-		Todos:  todoStore,
-		Config: configStore,
-		Lifecycle: desktop.Lifecycle{
-			Ready: func(publish func(func())) { update = publish },
-			Closed: func() {
-				todoStore.Close()
-				jobs.Close()
-			},
+		Todos:  todos,
+		Items:  items,
+		Config: initialConfig,
+		SaveConfig: func(value config.Config) error {
+			return config.Save(configPath, value)
 		},
 	})
 }

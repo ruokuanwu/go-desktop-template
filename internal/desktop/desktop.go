@@ -5,6 +5,8 @@ import (
 	"github.com/egoist/mygo/ui"
 	"go.uber.org/zap"
 
+	"go-desktop-template/internal/config"
+	"go-desktop-template/internal/model"
 	"go-desktop-template/internal/pkg/gtkfix"
 	"go-desktop-template/internal/store"
 	"go-desktop-template/internal/view"
@@ -13,25 +15,30 @@ import (
 type desktop struct {
 	window   *mygo.Window
 	tray     *mygo.Tray
+	todos    *store.Todo
 	config   *store.Config
 	quitting bool
 }
 
-// Lifecycle connects background result publication and cancellation to the window.
-// Ready runs on the UI thread before the window can receive input.
-type Lifecycle struct {
-	Ready  func(update func(func()))
-	Closed func()
-}
-
 type Options struct {
-	Todos     *store.Todo
-	Config    *store.Config
-	Lifecycle Lifecycle
+	Todos      store.Service
+	Items      []model.Todo
+	Config     config.Config
+	SaveConfig func(config.Config) error
 }
 
 func Run(opts Options) error {
-	d := &desktop{config: opts.Config}
+	d := &desktop{}
+	defer func() {
+		if d.todos != nil {
+			d.todos.Close()
+			d.todos.Wait()
+		}
+		if d.config != nil {
+			d.config.Close()
+			d.config.Wait()
+		}
+	}()
 	mygo.App.WhenReady(func() { d.ready(opts) })
 	return mygo.App.Run()
 }
@@ -40,14 +47,20 @@ func (d *desktop) ready(opts Options) {
 	if err := gtkfix.TextColor(); err != nil {
 		zap.L().Warn("apply text color workaround", zap.Error(err))
 	}
-	screen := view.New(opts.Todos, d.config)
+	var screen *view.View
 	d.window = mygo.NewWindow(mygo.WindowOptions{
 		Title: "Todo Desktop", Width: 1000, Height: 720,
 		MinWidth: 720, MinHeight: 520,
-		StateKey: "main", Content: ui.View(screen.Render),
+		StateKey: "main", Content: ui.View(func(c *ui.Context) { screen.Render(c) }),
 	})
-	opts.Lifecycle.Ready(d.window.Update)
-	d.window.OnClosed(opts.Lifecycle.Closed)
+	d.todos = store.NewTodo(opts.Todos, d.window.Update, opts.Items)
+	d.config = store.NewConfig(d.window.Update, opts.Config, opts.SaveConfig)
+	// On the UI thread, NewWindow defers the first render until the next loop turn.
+	screen = view.New(d.todos, d.config)
+	d.window.OnClosed(func() {
+		d.todos.Close()
+		d.config.Close()
+	})
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { d.quitting = true })
 	var err error
 	d.tray, err = newTray(trayOptions{Show: d.show, Quit: mygo.App.Quit})
