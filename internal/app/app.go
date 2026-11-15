@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 
 	"go.uber.org/zap"
 
@@ -19,6 +20,11 @@ func Run(configPath string) (runErr error) {
 	initialConfig, err := config.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
+	}
+	settings := service.NewSettings(filepath.Join(filepath.Dir(configPath), "settings.json"))
+	preferences, err := settings.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("load settings: %w", err)
 	}
 	log, closeLogger, err := logger.New(initialConfig.Log)
 	if err != nil {
@@ -39,11 +45,10 @@ func Run(configPath string) (runErr error) {
 		return fmt.Errorf("load todos: %w", err)
 	}
 	return desktop.Run(desktop.Options{
-		Todos:  todos,
-		Items:  items,
-		Config: initialConfig,
-		SaveConfig: func(value config.Config) error {
-			return config.Save(configPath, value)
-		},
+		Todos:       todos,
+		Items:       items,
+		Settings:    settings,
+		Preferences: preferences,
+		DataPath:    initialConfig.DataDir,
 	})
 }

@@ -5,10 +5,14 @@ import (
 	"testing"
 	"time"
 
-	"go-desktop-template/internal/config"
+	"go-desktop-template/internal/model"
 )
 
-func nextConfigUpdate(t *testing.T, updates <-chan func()) func() {
+type settingsServiceFunc func(model.Settings) error
+
+func (f settingsServiceFunc) Save(value model.Settings) error { return f(value) }
+
+func nextSettingsUpdate(t *testing.T, updates <-chan func()) func() {
 	t.Helper()
 	select {
 	case publish := <-updates:
@@ -19,7 +23,7 @@ func nextConfigUpdate(t *testing.T, updates <-chan func()) func() {
 	}
 }
 
-func TestConfigCommandsPublishAfterPersistence(t *testing.T) {
+func TestSettingsCommandsPublishAfterPersistence(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		err  error
@@ -29,15 +33,16 @@ func TestConfigCommandsPublishAfterPersistence(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			updates := make(chan func(), 1)
-			initial := config.Config{Theme: "system"}
-			var saved config.Config
-			s := NewConfig(func(fn func()) { updates <- fn }, initial, func(value config.Config) error {
+			initial := model.Settings{Theme: "system"}
+			var saved model.Settings
+			service := settingsServiceFunc(func(value model.Settings) error {
 				saved = value
 				return tt.err
 			})
+			s := NewSettings(service, func(fn func()) { updates <- fn }, initial)
 			defer func() { s.Close(); s.Wait() }()
 			s.SetTheme("dark")
-			publish := nextConfigUpdate(t, updates)
+			publish := nextSettingsUpdate(t, updates)
 			if saved.Theme != "dark" || !s.State().Busy || s.State().Value != initial {
 				t.Fatalf("unexpected state before publication: %+v", s.State())
 			}
@@ -55,7 +60,7 @@ func TestConfigCommandsPublishAfterPersistence(t *testing.T) {
 				t.Fatalf("unexpected saved state: %+v", s.State())
 			}
 			s.SetCloseToTray(true)
-			nextConfigUpdate(t, updates)()
+			nextSettingsUpdate(t, updates)()
 			if !s.State().Value.CloseToTray || s.State().Value.Theme != "dark" {
 				t.Fatalf("unexpected tray state: %+v", s.State())
 			}
@@ -63,17 +68,18 @@ func TestConfigCommandsPublishAfterPersistence(t *testing.T) {
 	}
 }
 
-func TestConfigCloseSuppressesQueuedPublication(t *testing.T) {
+func TestSettingsCloseSuppressesQueuedPublication(t *testing.T) {
 	updates := make(chan func(), 1)
 	saves := 0
-	initial := config.Config{Theme: "system"}
-	s := NewConfig(func(fn func()) { updates <- fn }, initial, func(config.Config) error {
+	initial := model.Settings{Theme: "system"}
+	service := settingsServiceFunc(func(model.Settings) error {
 		saves++
 		return nil
 	})
+	s := NewSettings(service, func(fn func()) { updates <- fn }, initial)
 	defer func() { s.Close(); s.Wait() }()
 	s.SetTheme("dark")
-	publish := nextConfigUpdate(t, updates)
+	publish := nextSettingsUpdate(t, updates)
 	s.Close()
 	s.Wait()
 	publish()

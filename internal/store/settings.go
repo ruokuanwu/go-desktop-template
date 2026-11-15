@@ -4,55 +4,59 @@ import (
 	"context"
 	"sync"
 
-	"go-desktop-template/internal/config"
+	"go-desktop-template/internal/model"
 )
 
-type ConfigState struct {
-	Value       config.Config
+type SettingsState struct {
+	Value       model.Settings
 	Busy        bool
 	Message     string
 	TrayMessage string
 }
 
-type Config struct {
-	save    func(config.Config) error
+type SettingsService interface {
+	Save(model.Settings) error
+}
+
+type Settings struct {
+	service SettingsService
 	update  func(func())
 	ctx     context.Context
 	cancel  context.CancelFunc
 	workers sync.WaitGroup
-	state   ConfigState
+	state   SettingsState
 }
 
-func NewConfig(update func(func()), initial config.Config, save func(config.Config) error) *Config {
+func NewSettings(service SettingsService, update func(func()), initial model.Settings) *Settings {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Config{save: save, update: update, ctx: ctx, cancel: cancel, state: ConfigState{Value: initial}}
+	return &Settings{service: service, update: update, ctx: ctx, cancel: cancel, state: SettingsState{Value: initial}}
 }
 
-func (s *Config) State() ConfigState { return s.state }
+func (s *Settings) State() SettingsState { return s.state }
 
 // Close stops accepting commands and cancels workers. Call it on the UI thread.
-func (s *Config) Close() { s.cancel() }
+func (s *Settings) Close() { s.cancel() }
 
 // Wait waits for workers, not queued UI callbacks. Call it after Close, off the UI thread.
-func (s *Config) Wait() { s.workers.Wait() }
+func (s *Settings) Wait() { s.workers.Wait() }
 
-func (s *Config) SetTrayError(err error) {
+func (s *Settings) SetTrayError(err error) {
 	s.state.TrayMessage = "系统托盘不可用，关闭窗口将退出程序：" + err.Error()
 }
 
-func (s *Config) SetTheme(theme string) {
+func (s *Settings) SetTheme(theme string) {
 	value := s.state.Value
 	value.Theme = theme
 	s.saveValue(value)
 }
 
-func (s *Config) SetCloseToTray(enabled bool) {
+func (s *Settings) SetCloseToTray(enabled bool) {
 	value := s.state.Value
 	value.CloseToTray = enabled
 	s.saveValue(value)
 }
 
-func (s *Config) saveValue(config config.Config) {
+func (s *Settings) saveValue(value model.Settings) {
 	if s.state.Busy || s.ctx.Err() != nil {
 		return
 	}
@@ -62,7 +66,7 @@ func (s *Config) saveValue(config config.Config) {
 		defer s.workers.Done()
 		err := s.ctx.Err()
 		if err == nil {
-			err = s.save(config)
+			err = s.service.Save(value)
 		}
 		s.update(func() {
 			if s.ctx.Err() != nil {
@@ -73,7 +77,7 @@ func (s *Config) saveValue(config config.Config) {
 				s.state.Message = err.Error()
 				return
 			}
-			s.state.Value = config
+			s.state.Value = value
 		})
 	}()
 }

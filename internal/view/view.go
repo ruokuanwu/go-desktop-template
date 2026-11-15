@@ -10,27 +10,27 @@ import (
 )
 
 type View struct {
-	config     *store.Config
-	page       string
-	tasks      pages.Todo
-	dashboard  pages.Dashboard
-	configPage pages.Config
+	settings     *store.Settings
+	page         string
+	tasks        pages.Todo
+	dashboard    pages.Dashboard
+	settingsPage pages.Settings
 }
 
-func New(todos *store.Todo, config *store.Config) *View {
+func New(todos *store.Todo, settings *store.Settings, dataPath string) *View {
 	v := &View{
-		config:     config,
-		page:       "任务",
-		tasks:      pages.NewTodo(todos),
-		configPage: pages.NewConfig(config),
+		settings:     settings,
+		page:         "任务",
+		tasks:        pages.NewTodo(todos),
+		settingsPage: pages.NewSettings(settings, dataPath),
 	}
 	v.dashboard = pages.NewDashboard(todos, func() { v.page = "任务" })
 	return v
 }
 
 func (v *View) Render(c *ui.Context) {
-	config := v.config.State()
-	switch config.Value.Theme {
+	settings := v.settings.State()
+	switch settings.Value.Theme {
 	case "light":
 		c.SetTheme(theme.Default().Theme(false))
 	case "dark":
@@ -43,7 +43,7 @@ func (v *View) Render(c *ui.Context) {
 		case "概览":
 			v.dashboard.Render(c)
 		case "设置":
-			v.configPage.Render(c)
+			v.settingsPage.Render(c)
 		default:
 			v.tasks.Render(c)
 		}

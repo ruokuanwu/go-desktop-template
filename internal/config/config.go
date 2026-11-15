@@ -9,11 +9,10 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// Config is loaded once at startup and is not modified by user settings.
 type Config struct {
-	DataDir     string    `json:"data_dir"`
-	Theme       string    `json:"theme"`
-	CloseToTray bool      `json:"close_to_tray"`
-	Log         LogConfig `json:"log"`
+	DataDir string    `json:"data_dir"`
+	Log     LogConfig `json:"log"`
 }
 
 type LogConfig struct {
@@ -24,8 +23,7 @@ type LogConfig struct {
 
 func Load(path string) (Config, error) {
 	config := Config{
-		Theme: "system",
-		Log:   LogConfig{LogDir: "logs", MaxAge: 7, Level: "info"},
+		Log: LogConfig{LogDir: "logs", MaxAge: 7, Level: "info"},
 	}
 	data, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
@@ -59,32 +57,9 @@ func Load(path string) (Config, error) {
 	return config, nil
 }
 
-func Save(path string, config Config) error {
-	if err := validate(config); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	temp := path + ".tmp"
-	if err := os.WriteFile(temp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(temp, path)
-}
-
 func validate(config Config) error {
 	if config.DataDir == "" {
 		return fmt.Errorf("data directory must not be empty")
-	}
-	switch config.Theme {
-	case "system", "light", "dark":
-	default:
-		return fmt.Errorf("invalid theme: %s", config.Theme)
 	}
 	if config.Log.LogDir == "" {
 		return fmt.Errorf("log directory must not be empty")

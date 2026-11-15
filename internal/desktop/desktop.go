@@ -5,7 +5,6 @@ import (
 	"github.com/egoist/mygo/ui"
 	"go.uber.org/zap"
 
-	"go-desktop-template/internal/config"
 	"go-desktop-template/internal/model"
 	"go-desktop-template/internal/pkg/gtkfix"
 	"go-desktop-template/internal/store"
@@ -16,15 +15,16 @@ type desktop struct {
 	window   *mygo.Window
 	tray     *mygo.Tray
 	todos    *store.Todo
-	config   *store.Config
+	settings *store.Settings
 	quitting bool
 }
 
 type Options struct {
-	Todos      store.Service
-	Items      []model.Todo
-	Config     config.Config
-	SaveConfig func(config.Config) error
+	Todos       store.Service
+	Items       []model.Todo
+	Settings    store.SettingsService
+	Preferences model.Settings
+	DataPath    string
 }
 
 func Run(opts Options) error {
@@ -34,9 +34,9 @@ func Run(opts Options) error {
 			d.todos.Close()
 			d.todos.Wait()
 		}
-		if d.config != nil {
-			d.config.Close()
-			d.config.Wait()
+		if d.settings != nil {
+			d.settings.Close()
+			d.settings.Wait()
 		}
 	}()
 	mygo.App.WhenReady(func() { d.ready(opts) })
@@ -54,19 +54,19 @@ func (d *desktop) ready(opts Options) {
 		StateKey: "main", Content: ui.View(func(c *ui.Context) { screen.Render(c) }),
 	})
 	d.todos = store.NewTodo(opts.Todos, d.window.Update, opts.Items)
-	d.config = store.NewConfig(d.window.Update, opts.Config, opts.SaveConfig)
+	d.settings = store.NewSettings(opts.Settings, d.window.Update, opts.Preferences)
 	// On the UI thread, NewWindow defers the first render until the next loop turn.
-	screen = view.New(d.todos, d.config)
+	screen = view.New(d.todos, d.settings, opts.DataPath)
 	d.window.OnClosed(func() {
 		d.todos.Close()
-		d.config.Close()
+		d.settings.Close()
 	})
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { d.quitting = true })
 	var err error
 	d.tray, err = newTray(trayOptions{Show: d.show, Quit: mygo.App.Quit})
 	if err != nil {
 		zap.L().Warn("create system tray", zap.Error(err))
-		d.config.SetTrayError(err)
+		d.settings.SetTrayError(err)
 		d.window.Invalidate()
 	} else {
 		mygo.App.OnWillQuit(func(*mygo.QuitEvent) { d.tray.Destroy() })
@@ -83,7 +83,7 @@ func (d *desktop) show() {
 }
 
 func (d *desktop) onClose(e *mygo.CloseEvent) {
-	if !d.quitting && d.tray != nil && d.config.State().Value.CloseToTray {
+	if !d.quitting && d.tray != nil && d.settings.State().Value.CloseToTray {
 		e.PreventDefault()
 		d.window.Hide()
 	}

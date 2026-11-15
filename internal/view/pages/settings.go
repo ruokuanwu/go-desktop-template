@@ -9,16 +9,17 @@ import (
 	"go-desktop-template/internal/store"
 )
 
-type Config struct {
-	config *store.Config
+type Settings struct {
+	settings *store.Settings
+	dataPath string
 }
 
-func NewConfig(config *store.Config) Config {
-	return Config{config: config}
+func NewSettings(settings *store.Settings, dataPath string) Settings {
+	return Settings{settings: settings, dataPath: dataPath}
 }
 
-func (v *Config) Render(c *ui.Context) {
-	state := v.config.State()
+func (v *Settings) Render(c *ui.Context) {
+	state := v.settings.State()
 	tk := theme.TokensOf(c)
 	ui.Text(c, "外观").FontSize(18).Bold()
 	description := "设置自动保存在本机。"
@@ -36,7 +37,7 @@ func (v *Config) Render(c *ui.Context) {
 				variant = action.Primary
 			}
 			c.Key(option.value)
-			action.Button(c, option.label, action.ButtonProps{Variant: variant}).Disabled(state.Busy).OnClick(func() { v.config.SetTheme(option.value) })
+			action.Button(c, option.label, action.ButtonProps{Variant: variant}).Disabled(state.Busy).OnClick(func() { v.settings.SetTheme(option.value) })
 		}
 	})
 	ui.Text(c, "窗口行为").FontSize(18).Bold()
@@ -44,13 +45,13 @@ func (v *Config) Render(c *ui.Context) {
 		enabled := state.Value.CloseToTray
 		choice.Switch(c.Key("close-to-tray"), &enabled, choice.SwitchProps{}).
 			Label("关闭到系统托盘").Disabled(state.Busy || state.TrayMessage != "").
-			OnClick(func() { v.config.SetCloseToTray(enabled) })
+			OnClick(func() { v.settings.SetCloseToTray(enabled) })
 		ui.Text(c, "关闭到系统托盘")
 	})
 	ui.Text(c, "关闭窗口后继续在后台运行，可从托盘显示或退出。").Wrap().TextColor(tk.TextSecondary)
 	ui.Text(c, state.TrayMessage).Wrap().TextColor(tk.Error)
 	ui.Text(c, "本地数据目录").FontSize(18).Bold()
-	ui.Text(c, state.Value.DataDir).Wrap().TextColor(tk.TextSecondary)
+	ui.Text(c, v.dataPath).Wrap().TextColor(tk.TextSecondary)
 	ui.Text(c, "任务保存在 todos.db；关闭程序后可复制此文件备份。").Wrap().TextColor(tk.TextSecondary)
 	ui.Text(c, "纯 Go 原生界面，无 WebView，无本地 HTTP 服务。").Wrap().TextColor(tk.TextSecondary)
 }
