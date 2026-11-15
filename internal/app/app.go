@@ -46,7 +46,11 @@ func Run(configPath string) (runErr error) {
 		jobs.Close()
 		jobs.Wait()
 	}()
-	todoStore := store.NewTodo(todos, jobs, items)
+	todoStore := store.NewTodo(todos, func(publish func()) { update(publish) }, items)
+	defer func() {
+		todoStore.Close()
+		todoStore.Wait()
+	}()
 	configStore := store.NewConfig(jobs, initialConfig, func(value config.Config) error {
 		return config.Save(configPath, value)
 	})
@@ -54,8 +58,11 @@ func Run(configPath string) (runErr error) {
 		Todos:  todoStore,
 		Config: configStore,
 		Lifecycle: desktop.Lifecycle{
-			Ready:  func(publish func(func())) { update = publish },
-			Closed: jobs.Close,
+			Ready: func(publish func(func())) { update = publish },
+			Closed: func() {
+				todoStore.Close()
+				jobs.Close()
+			},
 		},
 	})
 }
