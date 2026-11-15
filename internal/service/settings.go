@@ -5,15 +5,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"go.uber.org/zap/zapcore"
 
 	"go-desktop-template/internal/model"
 )
 
-// Settings persists application settings in settings.json.
+// Settings persists application settings and provides the last committed snapshot.
 type Settings struct {
-	path string
+	path       string
+	operations sync.Mutex
+	mu         sync.RWMutex
+	current    model.Settings
+	loaded     bool
 }
 
 func NewSettings(path string) *Settings {
@@ -21,9 +26,13 @@ func NewSettings(path string) *Settings {
 }
 
 func (s *Settings) Load() (model.Settings, error) {
+	s.operations.Lock()
+	defer s.operations.Unlock()
+
 	value := model.Settings{Theme: "system", Log: model.LogSettings{MaxAge: 7, Level: "info"}}
 	data, err := os.ReadFile(s.path)
 	if os.IsNotExist(err) {
+		s.publish(value)
 		return value, nil
 	}
 	if err != nil {
@@ -35,10 +44,31 @@ func (s *Settings) Load() (model.Settings, error) {
 	if err := validateSettings(value); err != nil {
 		return value, err
 	}
+	s.publish(value)
 	return value, nil
 }
 
+// Current returns a copy of the last successfully loaded or saved settings.
+// It panics if neither Load nor Save has succeeded.
+func (s *Settings) Current() model.Settings {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if !s.loaded {
+		panic("settings: no configuration loaded")
+	}
+	return s.current
+}
+
+func (s *Settings) publish(value model.Settings) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.current, s.loaded = value, true
+}
+
 func (s *Settings) Save(value model.Settings) (saveErr error) {
+	s.operations.Lock()
+	defer s.operations.Unlock()
+
 	if err := validateSettings(value); err != nil {
 		return err
 	}
@@ -71,6 +101,7 @@ func (s *Settings) Save(value model.Settings) (saveErr error) {
 	if err := os.Rename(file.Name(), s.path); err != nil {
 		return fmt.Errorf("replace settings: %w", err)
 	}
+	s.publish(value)
 	return nil
 }
 
