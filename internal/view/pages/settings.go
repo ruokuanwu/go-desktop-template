@@ -11,11 +11,10 @@ import (
 
 type Settings struct {
 	settings *store.Settings
-	dataPath string
 }
 
-func NewSettings(settings *store.Settings, dataPath string) Settings {
-	return Settings{settings: settings, dataPath: dataPath}
+func NewSettings(settings *store.Settings) Settings {
+	return Settings{settings: settings}
 }
 
 func (v *Settings) Render(c *ui.Context) {
@@ -51,7 +50,6 @@ func (v *Settings) Render(c *ui.Context) {
 	ui.Text(c, "关闭窗口后继续在后台运行，可从托盘显示或退出。").Wrap().TextColor(tk.TextSecondary)
 	ui.Text(c, state.TrayMessage).Wrap().TextColor(tk.Error)
 	ui.Text(c, "本地数据目录").FontSize(18).Bold()
-	ui.Text(c, v.dataPath).Wrap().TextColor(tk.TextSecondary)
-	ui.Text(c, "任务保存在 todos.db；关闭程序后可复制此文件备份。").Wrap().TextColor(tk.TextSecondary)
+	ui.Text(c, "任务保存在 data.db；关闭程序后可复制此文件备份。").Wrap().TextColor(tk.TextSecondary)
 	ui.Text(c, "纯 Go 原生界面，无 WebView，无本地 HTTP 服务。").Wrap().TextColor(tk.TextSecondary)
 }

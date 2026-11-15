@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"go.uber.org/zap"
 
-	"go-desktop-template/internal/config"
 	"go-desktop-template/internal/db"
 	"go-desktop-template/internal/desktop"
 	"go-desktop-template/internal/pkg/logger"
@@ -16,25 +16,27 @@ import (
 	"go-desktop-template/internal/service"
 )
 
-func Run(configPath string) (runErr error) {
-	initialConfig, err := config.Load(configPath)
+func Run() (runErr error) {
+	base, err := os.UserConfigDir()
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return fmt.Errorf("resolve user configuration directory: %w", err)
 	}
-	settings := service.NewSettings(filepath.Join(filepath.Dir(configPath), "settings.json"))
-	preferences, err := settings.Load(configPath)
+	base = filepath.Join(base, "go-desktop-template")
+
+	settings := service.NewSettings(filepath.Join(base, "settings.json"))
+	preferences, err := settings.Load()
 	if err != nil {
 		return fmt.Errorf("load settings: %w", err)
 	}
-	log, closeLogger, err := logger.New(initialConfig.Log)
+	log, closeLogger, err := logger.New(filepath.Join(base, "logs"), preferences.Log)
 	if err != nil {
 		return fmt.Errorf("initialize logger: %w", err)
 	}
 	defer func() { runErr = errors.Join(runErr, closeLogger()) }()
 	restoreLogger := zap.ReplaceGlobals(log)
 	defer restoreLogger()
-	zap.L().Error("application starting", zap.String("data_dir", initialConfig.DataDir))
-	database, err := db.Open(initialConfig.DataDir)
+	dataPath := filepath.Join(base, "data.db")
+	database, err := db.Open(dataPath)
 	if err != nil {
 		return err
 	}
@@ -49,6 +51,5 @@ func Run(configPath string) (runErr error) {
 		Items:       items,
 		Settings:    settings,
 		Preferences: preferences,
-		DataPath:    initialConfig.DataDir,
 	})
 }

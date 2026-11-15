@@ -24,7 +24,6 @@ type Options struct {
 	Items       []model.Todo
 	Settings    store.SettingsService
 	Preferences model.Settings
-	DataPath    string
 }
 
 func Run(opts Options) error {
@@ -56,7 +55,7 @@ func (d *desktop) ready(opts Options) {
 	d.todos = store.NewTodo(opts.Todos, d.window.Update, opts.Items)
 	d.settings = store.NewSettings(opts.Settings, d.window.Update, opts.Preferences)
 	// On the UI thread, NewWindow defers the first render until the next loop turn.
-	screen = view.New(d.todos, d.settings, opts.DataPath)
+	screen = view.New(d.todos, d.settings)
 	d.window.OnClosed(func() {
 		d.todos.Close()
 		d.settings.Close()

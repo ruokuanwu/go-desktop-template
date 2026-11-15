@@ -6,10 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"go.uber.org/zap/zapcore"
+
 	"go-desktop-template/internal/model"
 )
 
-// Settings persists user preferences separately from the startup configuration.
+// Settings persists application settings in settings.json.
 type Settings struct {
 	path string
 }
@@ -18,14 +20,9 @@ func NewSettings(path string) *Settings {
 	return &Settings{path: path}
 }
 
-// Load imports preferences from the old combined config only if settings do not exist.
-func (s *Settings) Load(legacyConfigPath string) (model.Settings, error) {
-	value := model.Settings{Theme: "system"}
+func (s *Settings) Load() (model.Settings, error) {
+	value := model.Settings{Theme: "system", Log: model.LogSettings{MaxAge: 7, Level: "info"}}
 	data, err := os.ReadFile(s.path)
-	legacy := os.IsNotExist(err)
-	if legacy {
-		data, err = os.ReadFile(legacyConfigPath)
-	}
 	if os.IsNotExist(err) {
 		return value, nil
 	}
@@ -37,11 +34,6 @@ func (s *Settings) Load(legacyConfigPath string) (model.Settings, error) {
 	}
 	if err := validateSettings(value); err != nil {
 		return value, err
-	}
-	if legacy {
-		if err := s.Save(value); err != nil {
-			return value, fmt.Errorf("migrate settings: %w", err)
-		}
 	}
 	return value, nil
 }
@@ -85,8 +77,15 @@ func (s *Settings) Save(value model.Settings) (saveErr error) {
 func validateSettings(value model.Settings) error {
 	switch value.Theme {
 	case "system", "light", "dark":
-		return nil
 	default:
 		return fmt.Errorf("invalid theme: %s", value.Theme)
 	}
+	if value.Log.MaxAge < 0 {
+		return fmt.Errorf("log max_age must not be negative")
+	}
+	var level zapcore.Level
+	if err := level.UnmarshalText([]byte(value.Log.Level)); err != nil {
+		return fmt.Errorf("invalid log level: %w", err)
+	}
+	return nil
 }

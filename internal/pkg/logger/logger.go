@@ -10,15 +10,14 @@ import (
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 
-	"go-desktop-template/internal/config"
+	"go-desktop-template/internal/model"
 )
 
-func New(cfg config.LogConfig) (*zap.Logger, func() error, error) {
+func New(dir string, cfg model.LogSettings) (*zap.Logger, func() error, error) {
 	var level zapcore.Level
 	if err := level.UnmarshalText([]byte(cfg.Level)); err != nil {
 		return nil, nil, fmt.Errorf("parse log level: %w", err)
 	}
-	dir := cfg.LogDir
 	if !filepath.IsAbs(dir) {
 		return nil, nil, fmt.Errorf("log dir is not absolute: %s", dir)
 	}
