@@ -27,7 +27,7 @@ type TodoStore struct {
 	workers     sync.WaitGroup
 	mu          sync.RWMutex
 	state       TodoState
-	subscribers map[uint64]func()
+	subscribers map[uint64]func(TodoState)
 	nextID      uint64
 }
 
@@ -35,7 +35,7 @@ func NewTodoStore(service TodoService, items []model.Todo) *TodoStore {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &TodoStore{
 		service: service, ctx: ctx, cancel: cancel,
-		state: TodoState{Items: slices.Clone(items)}, subscribers: make(map[uint64]func()),
+		state: TodoState{Items: slices.Clone(items)}, subscribers: make(map[uint64]func(TodoState)),
 	}
 }
 
@@ -48,11 +48,12 @@ func (s *TodoStore) State() TodoState {
 	return state
 }
 
-// Subscribe registers a change notification without an initial notification.
+// Subscribe delivers an independent state snapshot for each change, without an initial notification.
 // Callbacks run synchronously on the notifying goroutine, outside the lock;
-// they must be concurrency-safe and nonblocking. Unsubscribe is idempotent
-// but does not stop callbacks already captured for notification.
-func (s *TodoStore) Subscribe(fn func()) func() {
+// they must be concurrency-safe and nonblocking. Concurrent notifications may
+// arrive out of order. Unsubscribe is idempotent but does not stop callbacks
+// already captured for notification.
+func (s *TodoStore) Subscribe(fn func(TodoState)) func() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.ctx.Err() != nil {
@@ -127,15 +128,19 @@ func (s *TodoStore) mutate(work func(context.Context, *TodoState) error, success
 	}()
 }
 
-// notificationLocked captures subscribers while mu is held.
+// notificationLocked captures the state and subscribers while mu is held.
 func (s *TodoStore) notificationLocked() func() {
-	callbacks := make([]func(), 0, len(s.subscribers))
+	state := s.state
+	state.Items = slices.Clone(state.Items)
+	callbacks := make([]func(TodoState), 0, len(s.subscribers))
 	for _, fn := range s.subscribers {
 		callbacks = append(callbacks, fn)
 	}
 	return func() {
 		for _, fn := range callbacks {
-			fn()
+			snapshot := state
+			snapshot.Items = slices.Clone(state.Items)
+			fn(snapshot)
 		}
 	}
 }

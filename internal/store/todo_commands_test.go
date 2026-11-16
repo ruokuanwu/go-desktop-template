@@ -51,7 +51,7 @@ func TestTodoCommandsPublishAfterPersistence(t *testing.T) {
 	var unblock sync.Once
 	s := NewTodoStore(service, nil)
 	defer func() { unblock.Do(func() { close(service.release) }); s.Close(); s.Wait() }()
-	s.Subscribe(func() { updates <- s.State() })
+	s.Subscribe(func(state TodoState) { updates <- state })
 	var added atomic.Bool
 	s.Add("created", func() { added.Store(true); _ = s.State() })
 	state := nextTodoState(t, updates)
@@ -94,7 +94,7 @@ func TestTodoCommandFailurePreservesItems(t *testing.T) {
 			updates := make(chan TodoState, 2)
 			s := NewTodoStore(&todoServiceStub{err: wantErr}, []model.Todo{{ID: 1}})
 			defer func() { s.Close(); s.Wait() }()
-			s.Subscribe(func() { updates <- s.State() })
+			s.Subscribe(func(state TodoState) { updates <- state })
 			var called atomic.Bool
 			switch command {
 			case "add":
@@ -120,7 +120,7 @@ func TestTodoCloseSuppressesPublication(t *testing.T) {
 	defer func() { unblock.Do(func() { close(service.release) }); s.Close(); s.Wait() }()
 	var called atomic.Bool
 	var notifications atomic.Int32
-	s.Subscribe(func() { notifications.Add(1) })
+	s.Subscribe(func(TodoState) { notifications.Add(1) })
 	s.Add("created", func() { called.Store(true) })
 	select {
 	case <-service.started:
@@ -128,7 +128,7 @@ func TestTodoCloseSuppressesPublication(t *testing.T) {
 		t.Fatal("timed out waiting for save")
 	}
 	s.Close()
-	s.Subscribe(func() { notifications.Add(1) })()
+	s.Subscribe(func(TodoState) { notifications.Add(1) })()
 	unblock.Do(func() { close(service.release) })
 	s.Wait()
 	state := s.State()
@@ -151,8 +151,17 @@ func TestTodoSnapshotsAndSubscriptions(t *testing.T) {
 		t.Fatal("store shares mutable items with caller")
 	}
 	var first, second atomic.Int32
-	unsubscribe := s.Subscribe(func() { first.Add(1); _ = s.State() })
-	s.Subscribe(func() { second.Add(1) })
+	unsubscribe := s.Subscribe(func(state TodoState) {
+		first.Add(1)
+		state.Items[0].Title = "subscriber change"
+		_ = s.State()
+	})
+	s.Subscribe(func(state TodoState) {
+		second.Add(1)
+		if len(state.Items) != 0 && state.Items[0].Title != "initial" {
+			t.Error("subscribers share mutable items")
+		}
+	})
 	if first.Load() != 0 || second.Load() != 0 {
 		t.Fatal("unexpected initial notification")
 	}
@@ -161,6 +170,9 @@ func TestTodoSnapshotsAndSubscriptions(t *testing.T) {
 	s.workers.Wait()
 	if first.Load() != 2 || second.Load() != 2 {
 		t.Fatal("missing notifications")
+	}
+	if s.State().Items[0].Title != "initial" {
+		t.Fatal("subscriber changed store state")
 	}
 	unsubscribe()
 	unsubscribe()
@@ -180,7 +192,7 @@ func TestTodoConcurrentCommandsAndClose(t *testing.T) {
 	for range 16 {
 		callers.Go(func() {
 			for range 50 {
-				unsubscribe := s.Subscribe(func() { _ = s.State() })
+				unsubscribe := s.Subscribe(func(TodoState) { _ = s.State() })
 				s.Add("created", nil)
 				s.SetCompleted(1, true)
 				s.Delete(2)

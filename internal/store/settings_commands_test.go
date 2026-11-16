@@ -50,7 +50,7 @@ func TestSettingsCommandsPublishAfterPersistence(t *testing.T) {
 				s.Close()
 				s.Wait()
 			}()
-			unsubscribe := s.Subscribe(func() { updates <- s.State() })
+			unsubscribe := s.Subscribe(func(state SettingsState) { updates <- state })
 			defer unsubscribe()
 			s.SetTheme("dark")
 			state := nextSettingsState(t, updates)
@@ -103,7 +103,7 @@ func TestSettingsCloseSuppressesPublication(t *testing.T) {
 		s.Close()
 		s.Wait()
 	}()
-	s.Subscribe(func() { notifications.Add(1) })
+	s.Subscribe(func(SettingsState) { notifications.Add(1) })
 	s.SetTheme("dark")
 	select {
 	case <-started:
@@ -111,7 +111,7 @@ func TestSettingsCloseSuppressesPublication(t *testing.T) {
 		t.Fatal("timed out waiting for save")
 	}
 	s.Close()
-	s.Subscribe(func() { notifications.Add(1) })()
+	s.Subscribe(func(SettingsState) { notifications.Add(1) })()
 	unblock.Do(func() { close(release) })
 	s.Wait()
 	s.SetCloseToTray(true)
@@ -122,11 +122,12 @@ func TestSettingsSubscriptionsAndSnapshot(t *testing.T) {
 	s := NewSettingsStore(settingsServiceFunc(func(model.Settings) error { return nil }), model.Settings{Theme: "system"})
 	defer func() { s.Close(); s.Wait() }()
 	var first, second int
-	unsubscribe := s.Subscribe(func() {
+	unsubscribe := s.Subscribe(func(state SettingsState) {
+		state.Value.Theme = "subscriber change"
 		first++
 		_ = s.State()
 	})
-	s.Subscribe(func() { second++ })
+	s.Subscribe(func(SettingsState) { second++ })
 	if first != 0 || second != 0 {
 		t.Fatal("subscription sent an initial notification")
 	}
@@ -150,7 +151,7 @@ func TestSettingsConcurrentCommandsAndClose(t *testing.T) {
 	for range 16 {
 		callers.Go(func() {
 			for range 50 {
-				unsubscribe := s.Subscribe(func() { _ = s.State() })
+				unsubscribe := s.Subscribe(func(SettingsState) { _ = s.State() })
 				s.SetTheme("dark")
 				s.SetCloseToTray(true)
 				s.SetTrayError(errors.New("tray failed"))

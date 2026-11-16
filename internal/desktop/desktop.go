@@ -40,8 +40,8 @@ func (d *desktop) ready() {
 		MinWidth: 720, MinHeight: 520,
 		StateKey: "main", Content: ui.View(func(c *ui.Context) { screen.Render(c) }),
 	})
-	unsubscribeTodos := d.todos.Subscribe(d.window.Invalidate)
-	unsubscribeSettings := d.settings.Subscribe(d.window.Invalidate)
+	unsubscribeTodos := d.todos.Subscribe(func(store.TodoState) { d.window.Invalidate() })
+	unsubscribeSettings := d.settings.Subscribe(func(store.SettingsState) { d.window.Invalidate() })
 	// On the UI thread, NewWindow defers the first render until the next loop turn.
 	screen = view.New(d.todos, d.settings, d.window.Update)
 	d.window.OnClosed(func() {

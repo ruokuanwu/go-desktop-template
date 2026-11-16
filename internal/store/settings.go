@@ -24,7 +24,7 @@ type SettingsStore struct {
 	workers     sync.WaitGroup
 	mu          sync.RWMutex
 	state       SettingsState
-	subscribers map[uint64]func()
+	subscribers map[uint64]func(SettingsState)
 	nextID      uint64
 }
 
@@ -32,7 +32,7 @@ func NewSettingsStore(service SettingsService, initial model.Settings) *Settings
 	ctx, cancel := context.WithCancel(context.Background())
 	return &SettingsStore{
 		service: service, ctx: ctx, cancel: cancel,
-		state: SettingsState{Value: initial}, subscribers: make(map[uint64]func()),
+		state: SettingsState{Value: initial}, subscribers: make(map[uint64]func(SettingsState)),
 	}
 }
 
@@ -43,11 +43,12 @@ func (s *SettingsStore) State() SettingsState {
 	return s.state
 }
 
-// Subscribe registers a change notification without an initial notification.
+// Subscribe delivers an independent state snapshot for each change, without an initial notification.
 // Callbacks run synchronously on the notifying goroutine, outside the lock;
-// they must be concurrency-safe and nonblocking. Unsubscribe is idempotent
-// but does not stop callbacks already captured for notification.
-func (s *SettingsStore) Subscribe(fn func()) func() {
+// they must be concurrency-safe and nonblocking. Concurrent notifications may
+// arrive out of order. Unsubscribe is idempotent but does not stop callbacks
+// already captured for notification.
+func (s *SettingsStore) Subscribe(fn func(SettingsState)) func() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.ctx.Err() != nil {
@@ -131,15 +132,16 @@ func (s *SettingsStore) saveValue(change func(*model.Settings)) {
 	}()
 }
 
-// notificationLocked captures subscribers while mu is held.
+// notificationLocked captures the state and subscribers while mu is held.
 func (s *SettingsStore) notificationLocked() func() {
-	callbacks := make([]func(), 0, len(s.subscribers))
+	state := s.state
+	callbacks := make([]func(SettingsState), 0, len(s.subscribers))
 	for _, fn := range s.subscribers {
 		callbacks = append(callbacks, fn)
 	}
 	return func() {
 		for _, fn := range callbacks {
-			fn()
+			fn(state)
 		}
 	}
 }
