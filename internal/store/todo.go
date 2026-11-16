@@ -2,13 +2,16 @@ package store
 
 import (
 	"context"
+	"errors"
 	"slices"
+	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"go-desktop-template/internal/model"
 )
 
-type TodoService interface {
+type TodoRepository interface {
 	Create(context.Context, string) (model.Todo, error)
 	SetCompleted(context.Context, int64, bool) error
 	Delete(context.Context, int64) error
@@ -21,7 +24,7 @@ type TodoState struct {
 }
 
 type TodoStore struct {
-	service     TodoService
+	repo        TodoRepository
 	ctx         context.Context
 	cancel      context.CancelFunc
 	workers     sync.WaitGroup
@@ -31,10 +34,10 @@ type TodoStore struct {
 	nextID      uint64
 }
 
-func NewTodoStore(service TodoService, items []model.Todo) *TodoStore {
+func NewTodoStore(repo TodoRepository, items []model.Todo) *TodoStore {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &TodoStore{
-		service: service, ctx: ctx, cancel: cancel,
+		repo: repo, ctx: ctx, cancel: cancel,
 		state: TodoState{Items: slices.Clone(items)}, subscribers: make(map[uint64]func(TodoState)),
 	}
 }
@@ -150,7 +153,12 @@ func (s *TodoStore) notificationLocked() func() {
 // committed with the result may still run after Close.
 func (s *TodoStore) Add(title string, success func()) {
 	s.mutate(func(ctx context.Context, state *TodoState) error {
-		created, err := s.service.Create(ctx, title)
+		title = strings.TrimSpace(title)
+		length := utf8.RuneCountInString(title)
+		if !utf8.ValidString(title) || length < 1 || length > 200 {
+			return errors.New("todo title must contain 1–200 Unicode characters")
+		}
+		created, err := s.repo.Create(ctx, title)
 		if err != nil {
 			return err
 		}
@@ -161,7 +169,7 @@ func (s *TodoStore) Add(title string, success func()) {
 
 func (s *TodoStore) SetCompleted(id int64, completed bool) {
 	s.mutate(func(ctx context.Context, state *TodoState) error {
-		if err := s.service.SetCompleted(ctx, id, completed); err != nil {
+		if err := s.repo.SetCompleted(ctx, id, completed); err != nil {
 			return err
 		}
 		for i := range state.Items {
@@ -176,7 +184,7 @@ func (s *TodoStore) SetCompleted(id int64, completed bool) {
 
 func (s *TodoStore) Delete(id int64) {
 	s.mutate(func(ctx context.Context, state *TodoState) error {
-		if err := s.service.Delete(ctx, id); err != nil {
+		if err := s.repo.Delete(ctx, id); err != nil {
 			return err
 		}
 		state.Items = slices.DeleteFunc(state.Items, func(item model.Todo) bool { return item.ID == id })

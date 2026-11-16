@@ -42,7 +42,7 @@ func Run() (runErr error) {
 		return err
 	}
 	defer database.Close()
-	todos := service.NewTodoService(repository.NewTodoRepository(database))
+	todos := repository.NewTodoRepository(database)
 	items, err := todos.List(context.Background())
 	if err != nil {
 		return fmt.Errorf("load todos: %w", err)

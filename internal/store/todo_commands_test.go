@@ -11,27 +11,27 @@ import (
 	"go-desktop-template/internal/model"
 )
 
-type todoServiceStub struct {
+type todoRepositoryStub struct {
 	err error
 }
 
-func (s *todoServiceStub) Create(context.Context, string) (model.Todo, error) {
+func (s *todoRepositoryStub) Create(context.Context, string) (model.Todo, error) {
 	return model.Todo{ID: 2, Title: "created"}, s.err
 }
 
-func (s *todoServiceStub) SetCompleted(context.Context, int64, bool) error { return s.err }
-func (s *todoServiceStub) Delete(context.Context, int64) error             { return s.err }
+func (s *todoRepositoryStub) SetCompleted(context.Context, int64, bool) error { return s.err }
+func (s *todoRepositoryStub) Delete(context.Context, int64) error             { return s.err }
 
-type blockingTodoService struct {
-	todoServiceStub
+type blockingTodoRepository struct {
+	todoRepositoryStub
 	started chan struct{}
 	release chan struct{}
 }
 
-func (s *blockingTodoService) Create(ctx context.Context, title string) (model.Todo, error) {
+func (s *blockingTodoRepository) Create(ctx context.Context, title string) (model.Todo, error) {
 	close(s.started)
 	<-s.release
-	return s.todoServiceStub.Create(ctx, title)
+	return s.todoRepositoryStub.Create(ctx, title)
 }
 
 func nextTodoState(t *testing.T, updates <-chan TodoState) TodoState {
@@ -47,10 +47,10 @@ func nextTodoState(t *testing.T, updates <-chan TodoState) TodoState {
 
 func TestTodoCommandsPublishAfterPersistence(t *testing.T) {
 	updates := make(chan TodoState, 8)
-	service := &blockingTodoService{started: make(chan struct{}), release: make(chan struct{})}
+	repo := &blockingTodoRepository{started: make(chan struct{}), release: make(chan struct{})}
 	var unblock sync.Once
-	s := NewTodoStore(service, nil)
-	defer func() { unblock.Do(func() { close(service.release) }); s.Close(); s.Wait() }()
+	s := NewTodoStore(repo, nil)
+	defer func() { unblock.Do(func() { close(repo.release) }); s.Close(); s.Wait() }()
 	s.Subscribe(func(state TodoState) { updates <- state })
 	var added atomic.Bool
 	s.Add("created", func() { added.Store(true); _ = s.State() })
@@ -62,7 +62,7 @@ func TestTodoCommandsPublishAfterPersistence(t *testing.T) {
 	if state = nextTodoState(t, updates); !state.Busy || state.Message != "正在保存任务，请稍后重试。" {
 		t.Fatalf("unexpected busy state: %+v", state)
 	}
-	unblock.Do(func() { close(service.release) })
+	unblock.Do(func() { close(repo.release) })
 	state = nextTodoState(t, updates)
 	if state.Busy || len(state.Items) != 1 || state.Items[0].ID != 2 || !added.Load() || state.Message != "" {
 		t.Fatalf("unexpected create state: %+v", state)
@@ -92,7 +92,7 @@ func TestTodoCommandFailurePreservesItems(t *testing.T) {
 		t.Run(command, func(t *testing.T) {
 			wantErr := errors.New("write failed")
 			updates := make(chan TodoState, 2)
-			s := NewTodoStore(&todoServiceStub{err: wantErr}, []model.Todo{{ID: 1}})
+			s := NewTodoStore(&todoRepositoryStub{err: wantErr}, []model.Todo{{ID: 1}})
 			defer func() { s.Close(); s.Wait() }()
 			s.Subscribe(func(state TodoState) { updates <- state })
 			var called atomic.Bool
@@ -114,22 +114,22 @@ func TestTodoCommandFailurePreservesItems(t *testing.T) {
 }
 
 func TestTodoCloseSuppressesPublication(t *testing.T) {
-	service := &blockingTodoService{started: make(chan struct{}), release: make(chan struct{})}
+	repo := &blockingTodoRepository{started: make(chan struct{}), release: make(chan struct{})}
 	var unblock sync.Once
-	s := NewTodoStore(service, nil)
-	defer func() { unblock.Do(func() { close(service.release) }); s.Close(); s.Wait() }()
+	s := NewTodoStore(repo, nil)
+	defer func() { unblock.Do(func() { close(repo.release) }); s.Close(); s.Wait() }()
 	var called atomic.Bool
 	var notifications atomic.Int32
 	s.Subscribe(func(TodoState) { notifications.Add(1) })
 	s.Add("created", func() { called.Store(true) })
 	select {
-	case <-service.started:
+	case <-repo.started:
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for save")
 	}
 	s.Close()
 	s.Subscribe(func(TodoState) { notifications.Add(1) })()
-	unblock.Do(func() { close(service.release) })
+	unblock.Do(func() { close(repo.release) })
 	s.Wait()
 	state := s.State()
 	s.Add("ignored", nil)
@@ -142,7 +142,7 @@ func TestTodoCloseSuppressesPublication(t *testing.T) {
 
 func TestTodoSnapshotsAndSubscriptions(t *testing.T) {
 	items := []model.Todo{{ID: 1, Title: "initial"}}
-	s := NewTodoStore(&todoServiceStub{}, items)
+	s := NewTodoStore(&todoRepositoryStub{}, items)
 	defer func() { s.Close(); s.Wait() }()
 	items[0].Title = "changed"
 	snapshot := s.State()
@@ -187,7 +187,7 @@ func TestTodoSnapshotsAndSubscriptions(t *testing.T) {
 }
 
 func TestTodoConcurrentCommandsAndClose(t *testing.T) {
-	s := NewTodoStore(&todoServiceStub{}, []model.Todo{{ID: 1}})
+	s := NewTodoStore(&todoRepositoryStub{}, []model.Todo{{ID: 1}})
 	var callers sync.WaitGroup
 	for range 16 {
 		callers.Go(func() {
