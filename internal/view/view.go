@@ -2,7 +2,6 @@ package view
 
 import (
 	"github.com/egoist/mygo/ui"
-	"github.com/lobehub/lobe-mygo/pkg/theme"
 
 	"go-desktop-template/internal/store"
 	"go-desktop-template/internal/view/layouts"
@@ -32,11 +31,11 @@ func (v *View) Render(c *ui.Context) {
 	settings := v.settings.State()
 	switch settings.Value.Theme {
 	case "light":
-		c.SetTheme(theme.Default().Theme(false))
+		c.SetTheme(linearTheme.Theme(false))
 	case "dark":
-		c.SetTheme(theme.Default().Theme(true))
+		c.SetTheme(linearTheme.Theme(true))
 	default:
-		theme.Apply(c)
+		linearTheme.Apply(c)
 	}
 	layouts.Shell(c, v.page, func(page string) { v.page = page }, func() {
 		switch v.page {
