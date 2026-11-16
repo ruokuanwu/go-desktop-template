@@ -23,7 +23,7 @@ func Run() (runErr error) {
 	}
 	base = filepath.Join(base, "go-desktop-template")
 
-	settings := service.NewSettings(filepath.Join(base, "settings.json"))
+	settings := service.NewSettingsService(filepath.Join(base, "settings.json"))
 	preferences, err := settings.Load()
 	if err != nil {
 		return fmt.Errorf("load settings: %w", err)
@@ -41,7 +41,7 @@ func Run() (runErr error) {
 		return err
 	}
 	defer database.Close()
-	todos := service.NewTodo(repository.NewTodo(database))
+	todos := service.NewTodoService(repository.NewTodoRepository(database))
 	items, err := todos.List(context.Background())
 	if err != nil {
 		return fmt.Errorf("load todos: %w", err)

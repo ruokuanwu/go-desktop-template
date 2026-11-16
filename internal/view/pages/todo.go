@@ -13,16 +13,16 @@ import (
 	"go-desktop-template/internal/view/components"
 )
 
-type Todo struct {
-	todos                 *store.Todo
+type TodoPage struct {
+	todos                 *store.TodoStore
 	title, search, filter string
 }
 
-func NewTodo(todos *store.Todo) Todo {
-	return Todo{todos: todos, filter: "全部"}
+func NewTodoPage(todos *store.TodoStore) TodoPage {
+	return TodoPage{todos: todos, filter: "全部"}
 }
 
-func (v *Todo) Render(c *ui.Context) {
+func (v *TodoPage) Render(c *ui.Context) {
 	state := v.todos.State()
 	add := func() { v.todos.Add(v.title, func() { v.title = "" }) }
 	total, completed := counts(state.Items)

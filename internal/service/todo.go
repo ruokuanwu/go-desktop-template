@@ -9,26 +9,26 @@ import (
 	"go-desktop-template/internal/model"
 )
 
-type Repository interface {
+type TodoRepository interface {
 	List(ctx context.Context) ([]model.Todo, error)
 	Create(ctx context.Context, title string) (model.Todo, error)
 	SetCompleted(ctx context.Context, id int64, completed bool) error
 	Delete(ctx context.Context, id int64) error
 }
 
-type Todo struct {
-	repo Repository
+type TodoService struct {
+	repo TodoRepository
 }
 
-func NewTodo(repo Repository) *Todo {
-	return &Todo{repo: repo}
+func NewTodoService(repo TodoRepository) *TodoService {
+	return &TodoService{repo: repo}
 }
 
-func (s *Todo) List(ctx context.Context) ([]model.Todo, error) {
+func (s *TodoService) List(ctx context.Context) ([]model.Todo, error) {
 	return s.repo.List(ctx)
 }
 
-func (s *Todo) Create(ctx context.Context, title string) (model.Todo, error) {
+func (s *TodoService) Create(ctx context.Context, title string) (model.Todo, error) {
 	title = strings.TrimSpace(title)
 	length := utf8.RuneCountInString(title)
 	if !utf8.ValidString(title) || length < 1 || length > 200 {
@@ -37,10 +37,10 @@ func (s *Todo) Create(ctx context.Context, title string) (model.Todo, error) {
 	return s.repo.Create(ctx, title)
 }
 
-func (s *Todo) SetCompleted(ctx context.Context, id int64, completed bool) error {
+func (s *TodoService) SetCompleted(ctx context.Context, id int64, completed bool) error {
 	return s.repo.SetCompleted(ctx, id, completed)
 }
 
-func (s *Todo) Delete(ctx context.Context, id int64) error {
+func (s *TodoService) Delete(ctx context.Context, id int64) error {
 	return s.repo.Delete(ctx, id)
 }

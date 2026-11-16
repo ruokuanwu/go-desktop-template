@@ -33,7 +33,7 @@ func nextTodoUpdate(t *testing.T, updates <-chan func()) func() {
 
 func TestTodoCommandsPublishAfterPersistence(t *testing.T) {
 	updates := make(chan func(), 1)
-	s := NewTodo(&todoServiceStub{}, func(fn func()) { updates <- fn }, nil)
+	s := NewTodoStore(&todoServiceStub{}, func(fn func()) { updates <- fn }, nil)
 	defer func() { s.Close(); s.Wait() }()
 	added := false
 	s.Add("created", func() { added = true })
@@ -68,7 +68,7 @@ func TestTodoCommandsPublishAfterPersistence(t *testing.T) {
 func TestTodoCommandFailurePreservesItems(t *testing.T) {
 	wantErr := errors.New("write failed")
 	updates := make(chan func(), 1)
-	s := NewTodo(&todoServiceStub{err: wantErr}, func(fn func()) { updates <- fn }, []model.Todo{{ID: 1}})
+	s := NewTodoStore(&todoServiceStub{err: wantErr}, func(fn func()) { updates <- fn }, []model.Todo{{ID: 1}})
 	defer func() { s.Close(); s.Wait() }()
 	called := false
 	s.Add("created", func() { called = true })
@@ -80,7 +80,7 @@ func TestTodoCommandFailurePreservesItems(t *testing.T) {
 
 func TestTodoCloseSuppressesQueuedPublication(t *testing.T) {
 	updates := make(chan func(), 1)
-	s := NewTodo(&todoServiceStub{}, func(fn func()) { updates <- fn }, nil)
+	s := NewTodoStore(&todoServiceStub{}, func(fn func()) { updates <- fn }, nil)
 	defer func() { s.Close(); s.Wait() }()
 	called := false
 	s.Add("created", func() { called = true })

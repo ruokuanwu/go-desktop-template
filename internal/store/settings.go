@@ -18,7 +18,7 @@ type SettingsService interface {
 	Save(model.Settings) error
 }
 
-type Settings struct {
+type SettingsStore struct {
 	service SettingsService
 	update  func(func())
 	ctx     context.Context
@@ -27,36 +27,36 @@ type Settings struct {
 	state   SettingsState
 }
 
-func NewSettings(service SettingsService, update func(func()), initial model.Settings) *Settings {
+func NewSettingsStore(service SettingsService, update func(func()), initial model.Settings) *SettingsStore {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Settings{service: service, update: update, ctx: ctx, cancel: cancel, state: SettingsState{Value: initial}}
+	return &SettingsStore{service: service, update: update, ctx: ctx, cancel: cancel, state: SettingsState{Value: initial}}
 }
 
-func (s *Settings) State() SettingsState { return s.state }
+func (s *SettingsStore) State() SettingsState { return s.state }
 
 // Close stops accepting commands and cancels workers. Call it on the UI thread.
-func (s *Settings) Close() { s.cancel() }
+func (s *SettingsStore) Close() { s.cancel() }
 
 // Wait waits for workers, not queued UI callbacks. Call it after Close, off the UI thread.
-func (s *Settings) Wait() { s.workers.Wait() }
+func (s *SettingsStore) Wait() { s.workers.Wait() }
 
-func (s *Settings) SetTrayError(err error) {
+func (s *SettingsStore) SetTrayError(err error) {
 	s.state.TrayMessage = "系统托盘不可用，关闭窗口将退出程序：" + err.Error()
 }
 
-func (s *Settings) SetTheme(theme string) {
+func (s *SettingsStore) SetTheme(theme string) {
 	value := s.state.Value
 	value.Theme = theme
 	s.saveValue(value)
 }
 
-func (s *Settings) SetCloseToTray(enabled bool) {
+func (s *SettingsStore) SetCloseToTray(enabled bool) {
 	value := s.state.Value
 	value.CloseToTray = enabled
 	s.saveValue(value)
 }
 
-func (s *Settings) saveValue(value model.Settings) {
+func (s *SettingsStore) saveValue(value model.Settings) {
 	if s.state.Busy || s.ctx.Err() != nil {
 		return
 	}

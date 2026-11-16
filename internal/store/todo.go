@@ -8,7 +8,7 @@ import (
 	"go-desktop-template/internal/model"
 )
 
-type Service interface {
+type TodoService interface {
 	Create(context.Context, string) (model.Todo, error)
 	SetCompleted(context.Context, int64, bool) error
 	Delete(context.Context, int64) error
@@ -20,8 +20,8 @@ type TodoState struct {
 	Message string
 }
 
-type Todo struct {
-	service Service
+type TodoStore struct {
+	service TodoService
 	update  func(func())
 	ctx     context.Context
 	cancel  context.CancelFunc
@@ -29,22 +29,22 @@ type Todo struct {
 	state   TodoState
 }
 
-func NewTodo(service Service, update func(func()), items []model.Todo) *Todo {
+func NewTodoStore(service TodoService, update func(func()), items []model.Todo) *TodoStore {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Todo{service: service, update: update, ctx: ctx, cancel: cancel, state: TodoState{Items: items}}
+	return &TodoStore{service: service, update: update, ctx: ctx, cancel: cancel, state: TodoState{Items: items}}
 }
 
 // State is read on the UI thread; callers must not mutate the returned items.
-func (s *Todo) State() TodoState { return s.state }
+func (s *TodoStore) State() TodoState { return s.state }
 
 // Close stops accepting commands and cancels workers. Call it on the UI thread.
-func (s *Todo) Close() { s.cancel() }
+func (s *TodoStore) Close() { s.cancel() }
 
 // Wait waits for workers, not queued UI callbacks. Call it after Close, off the UI thread.
-func (s *Todo) Wait() { s.workers.Wait() }
+func (s *TodoStore) Wait() { s.workers.Wait() }
 
 // Commands and published callbacks run on the UI thread.
-func (s *Todo) mutate(work func(context.Context) error, success func()) {
+func (s *TodoStore) mutate(work func(context.Context) error, success func()) {
 	if s.ctx.Err() != nil {
 		s.state.Message = "任务存储已关闭，无法执行操作。"
 		return
@@ -73,7 +73,7 @@ func (s *Todo) mutate(work func(context.Context) error, success func()) {
 	}()
 }
 
-func (s *Todo) Add(title string, success func()) {
+func (s *TodoStore) Add(title string, success func()) {
 	var created model.Todo
 	s.mutate(func(ctx context.Context) error {
 		var err error
@@ -87,7 +87,7 @@ func (s *Todo) Add(title string, success func()) {
 	})
 }
 
-func (s *Todo) SetCompleted(id int64, completed bool) {
+func (s *TodoStore) SetCompleted(id int64, completed bool) {
 	s.mutate(func(ctx context.Context) error { return s.service.SetCompleted(ctx, id, completed) }, func() {
 		for i := range s.state.Items {
 			if s.state.Items[i].ID == id {
@@ -98,7 +98,7 @@ func (s *Todo) SetCompleted(id int64, completed bool) {
 	})
 }
 
-func (s *Todo) Delete(id int64) {
+func (s *TodoStore) Delete(id int64) {
 	s.mutate(func(ctx context.Context) error { return s.service.Delete(ctx, id) }, func() {
 		s.state.Items = slices.DeleteFunc(s.state.Items, func(item model.Todo) bool { return item.ID == id })
 	})

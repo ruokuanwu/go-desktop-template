@@ -10,21 +10,21 @@ import (
 )
 
 type View struct {
-	settings     *store.Settings
+	settings     *store.SettingsStore
 	page         string
-	tasks        pages.Todo
-	dashboard    pages.Dashboard
-	settingsPage pages.Settings
+	tasks        pages.TodoPage
+	dashboard    pages.DashboardPage
+	settingsPage pages.SettingsPage
 }
 
-func New(todos *store.Todo, settings *store.Settings) *View {
+func New(todos *store.TodoStore, settings *store.SettingsStore) *View {
 	v := &View{
 		settings:     settings,
 		page:         "任务",
-		tasks:        pages.NewTodo(todos),
-		settingsPage: pages.NewSettings(settings),
+		tasks:        pages.NewTodoPage(todos),
+		settingsPage: pages.NewSettingsPage(settings),
 	}
-	v.dashboard = pages.NewDashboard(todos, func() { v.page = "任务" })
+	v.dashboard = pages.NewDashboardPage(todos, func() { v.page = "任务" })
 	return v
 }
 

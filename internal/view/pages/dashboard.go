@@ -20,16 +20,16 @@ func counts(items []model.Todo) (total, completed int) {
 	return len(items), completed
 }
 
-type Dashboard struct {
-	todos  *store.Todo
+type DashboardPage struct {
+	todos  *store.TodoStore
 	manage func()
 }
 
-func NewDashboard(todos *store.Todo, manage func()) Dashboard {
-	return Dashboard{todos: todos, manage: manage}
+func NewDashboardPage(todos *store.TodoStore, manage func()) DashboardPage {
+	return DashboardPage{todos: todos, manage: manage}
 }
 
-func (v *Dashboard) Render(c *ui.Context) {
+func (v *DashboardPage) Render(c *ui.Context) {
 	state := v.todos.State()
 	total, completed := counts(state.Items)
 	tk := theme.TokensOf(c)

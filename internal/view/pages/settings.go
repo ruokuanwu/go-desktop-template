@@ -9,15 +9,15 @@ import (
 	"go-desktop-template/internal/store"
 )
 
-type Settings struct {
-	settings *store.Settings
+type SettingsPage struct {
+	settings *store.SettingsStore
 }
 
-func NewSettings(settings *store.Settings) Settings {
-	return Settings{settings: settings}
+func NewSettingsPage(settings *store.SettingsStore) SettingsPage {
+	return SettingsPage{settings: settings}
 }
 
-func (v *Settings) Render(c *ui.Context) {
+func (v *SettingsPage) Render(c *ui.Context) {
 	state := v.settings.State()
 	tk := theme.TokensOf(c)
 	ui.Text(c, "外观").FontSize(18).Bold()

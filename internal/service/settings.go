@@ -12,8 +12,8 @@ import (
 	"go-desktop-template/internal/model"
 )
 
-// Settings persists application settings and provides the last committed snapshot.
-type Settings struct {
+// SettingsService persists application settings and provides the last committed snapshot.
+type SettingsService struct {
 	path       string
 	operations sync.Mutex
 	mu         sync.RWMutex
@@ -21,11 +21,11 @@ type Settings struct {
 	loaded     bool
 }
 
-func NewSettings(path string) *Settings {
-	return &Settings{path: path}
+func NewSettingsService(path string) *SettingsService {
+	return &SettingsService{path: path}
 }
 
-func (s *Settings) Load() (model.Settings, error) {
+func (s *SettingsService) Load() (model.Settings, error) {
 	s.operations.Lock()
 	defer s.operations.Unlock()
 
@@ -50,7 +50,7 @@ func (s *Settings) Load() (model.Settings, error) {
 
 // Current returns a copy of the last successfully loaded or saved settings.
 // It panics if neither Load nor Save has succeeded.
-func (s *Settings) Current() model.Settings {
+func (s *SettingsService) Current() model.Settings {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if !s.loaded {
@@ -59,13 +59,13 @@ func (s *Settings) Current() model.Settings {
 	return s.current
 }
 
-func (s *Settings) publish(value model.Settings) {
+func (s *SettingsService) publish(value model.Settings) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.current, s.loaded = value, true
 }
 
-func (s *Settings) Save(value model.Settings) (saveErr error) {
+func (s *SettingsService) Save(value model.Settings) (saveErr error) {
 	s.operations.Lock()
 	defer s.operations.Unlock()
 

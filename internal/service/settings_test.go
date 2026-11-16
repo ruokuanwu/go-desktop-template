@@ -10,7 +10,7 @@ import (
 
 func TestSettingsLoadDefaults(t *testing.T) {
 	dir := t.TempDir()
-	s := NewSettings(filepath.Join(dir, "settings.json"))
+	s := NewSettingsService(filepath.Join(dir, "settings.json"))
 	value, err := s.Load()
 	want := model.Settings{Theme: "system", Log: model.LogSettings{MaxAge: 7, Level: "info"}}
 	if err != nil || value != want {
@@ -21,12 +21,12 @@ func TestSettingsLoadDefaults(t *testing.T) {
 func TestSettingsPersistence(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
-	s := NewSettings(path)
+	s := NewSettingsService(path)
 	want := model.Settings{Theme: "light", CloseToTray: true, Log: model.LogSettings{MaxAge: 14, Level: "debug"}}
 	if err := s.Save(want); err != nil {
 		t.Fatal(err)
 	}
-	value, err := NewSettings(path).Load()
+	value, err := NewSettingsService(path).Load()
 	if err != nil || value != want {
 		t.Fatalf("reload settings: value=%+v, err=%v", value, err)
 	}
@@ -44,7 +44,7 @@ func TestSettingsLoadExistingPreferences(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"theme":"dark","close_to_tray":true}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	value, err := NewSettings(path).Load()
+	value, err := NewSettingsService(path).Load()
 	want := model.Settings{Theme: "dark", CloseToTray: true, Log: model.LogSettings{MaxAge: 7, Level: "info"}}
 	if err != nil || value != want {
 		t.Fatalf("load existing preferences: value=%+v, err=%v", value, err)
@@ -59,7 +59,7 @@ func TestSettingsLoadRejectsInvalidFile(t *testing.T) {
 			if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := NewSettings(path).Load(); err == nil {
+			if _, err := NewSettingsService(path).Load(); err == nil {
 				t.Fatal("invalid file silently ignored")
 			}
 		})
@@ -69,7 +69,7 @@ func TestSettingsLoadRejectsInvalidFile(t *testing.T) {
 func TestSettingsSaveRejectsInvalidLogging(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	for _, log := range []model.LogSettings{{MaxAge: -1, Level: "info"}, {MaxAge: 7, Level: "invalid"}} {
-		if err := NewSettings(path).Save(model.Settings{Theme: "system", Log: log}); err == nil {
+		if err := NewSettingsService(path).Save(model.Settings{Theme: "system", Log: log}); err == nil {
 			t.Fatalf("invalid logging settings accepted: %+v", log)
 		}
 	}
@@ -84,7 +84,7 @@ func TestSettingsSaveFailureCleansTemporaryFile(t *testing.T) {
 	if err := os.Mkdir(path, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := NewSettings(path).Save(model.Settings{Theme: "system"}); err == nil {
+	if err := NewSettingsService(path).Save(model.Settings{Theme: "system"}); err == nil {
 		t.Fatal("save to directory succeeded")
 	}
 	files, err := os.ReadDir(dir)

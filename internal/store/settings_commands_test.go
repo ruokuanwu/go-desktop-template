@@ -39,7 +39,7 @@ func TestSettingsCommandsPublishAfterPersistence(t *testing.T) {
 				saved = value
 				return tt.err
 			})
-			s := NewSettings(service, func(fn func()) { updates <- fn }, initial)
+			s := NewSettingsStore(service, func(fn func()) { updates <- fn }, initial)
 			defer func() { s.Close(); s.Wait() }()
 			s.SetTheme("dark")
 			publish := nextSettingsUpdate(t, updates)
@@ -76,7 +76,7 @@ func TestSettingsCloseSuppressesQueuedPublication(t *testing.T) {
 		saves++
 		return nil
 	})
-	s := NewSettings(service, func(fn func()) { updates <- fn }, initial)
+	s := NewSettingsStore(service, func(fn func()) { updates <- fn }, initial)
 	defer func() { s.Close(); s.Wait() }()
 	s.SetTheme("dark")
 	publish := nextSettingsUpdate(t, updates)

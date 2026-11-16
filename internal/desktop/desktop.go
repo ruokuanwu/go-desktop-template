@@ -14,13 +14,13 @@ import (
 type desktop struct {
 	window   *mygo.Window
 	tray     *mygo.Tray
-	todos    *store.Todo
-	settings *store.Settings
+	todos    *store.TodoStore
+	settings *store.SettingsStore
 	quitting bool
 }
 
 type Options struct {
-	Todos       store.Service
+	Todos       store.TodoService
 	Items       []model.Todo
 	Settings    store.SettingsService
 	Preferences model.Settings
@@ -52,8 +52,8 @@ func (d *desktop) ready(opts Options) {
 		MinWidth: 720, MinHeight: 520,
 		StateKey: "main", Content: ui.View(func(c *ui.Context) { screen.Render(c) }),
 	})
-	d.todos = store.NewTodo(opts.Todos, d.window.Update, opts.Items)
-	d.settings = store.NewSettings(opts.Settings, d.window.Update, opts.Preferences)
+	d.todos = store.NewTodoStore(opts.Todos, d.window.Update, opts.Items)
+	d.settings = store.NewSettingsStore(opts.Settings, d.window.Update, opts.Preferences)
 	// On the UI thread, NewWindow defers the first render until the next loop turn.
 	screen = view.New(d.todos, d.settings)
 	d.window.OnClosed(func() {
