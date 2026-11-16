@@ -53,10 +53,12 @@ func (d *desktop) ready(opts Options) {
 		StateKey: "main", Content: ui.View(func(c *ui.Context) { screen.Render(c) }),
 	})
 	d.todos = store.NewTodoStore(opts.Todos, d.window.Update, opts.Items)
-	d.settings = store.NewSettingsStore(opts.Settings, d.window.Update, opts.Preferences)
+	d.settings = store.NewSettingsStore(opts.Settings, opts.Preferences)
+	unsubscribeSettings := d.settings.Subscribe(d.window.Invalidate)
 	// On the UI thread, NewWindow defers the first render until the next loop turn.
 	screen = view.New(d.todos, d.settings)
 	d.window.OnClosed(func() {
+		unsubscribeSettings()
 		d.todos.Close()
 		d.settings.Close()
 	})
@@ -66,7 +68,6 @@ func (d *desktop) ready(opts Options) {
 	if err != nil {
 		zap.L().Warn("create system tray", zap.Error(err))
 		d.settings.SetTrayError(err)
-		d.window.Invalidate()
 	} else {
 		mygo.App.OnWillQuit(func(*mygo.QuitEvent) { d.tray.Destroy() })
 	}

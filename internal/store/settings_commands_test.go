@@ -2,6 +2,8 @@ package store
 
 import (
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,14 +14,14 @@ type settingsServiceFunc func(model.Settings) error
 
 func (f settingsServiceFunc) Save(value model.Settings) error { return f(value) }
 
-func nextSettingsUpdate(t *testing.T, updates <-chan func()) func() {
+func nextSettingsState(t *testing.T, updates <-chan SettingsState) SettingsState {
 	t.Helper()
 	select {
-	case publish := <-updates:
-		return publish
+	case state := <-updates:
+		return state
 	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for UI update")
-		return nil
+		t.Fatal("timed out waiting for state notification")
+		return SettingsState{}
 	}
 }
 
@@ -32,59 +34,132 @@ func TestSettingsCommandsPublishAfterPersistence(t *testing.T) {
 		{name: "failure", err: errors.New("write failed")},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			updates := make(chan func(), 1)
+			updates := make(chan SettingsState, 4)
+			saved := make(chan model.Settings, 1)
+			release := make(chan struct{})
+			var unblock sync.Once
 			initial := model.Settings{Theme: "system"}
-			var saved model.Settings
 			service := settingsServiceFunc(func(value model.Settings) error {
-				saved = value
+				saved <- value
+				<-release
 				return tt.err
 			})
-			s := NewSettingsStore(service, func(fn func()) { updates <- fn }, initial)
-			defer func() { s.Close(); s.Wait() }()
+			s := NewSettingsStore(service, initial)
+			defer func() {
+				unblock.Do(func() { close(release) })
+				s.Close()
+				s.Wait()
+			}()
+			unsubscribe := s.Subscribe(func() { updates <- s.State() })
+			defer unsubscribe()
 			s.SetTheme("dark")
-			publish := nextSettingsUpdate(t, updates)
-			if saved.Theme != "dark" || !s.State().Busy || s.State().Value != initial {
-				t.Fatalf("unexpected state before publication: %+v", s.State())
+			state := nextSettingsState(t, updates)
+			if !state.Busy || state.Value != initial {
+				t.Fatalf("unexpected state before persistence: %+v", state)
 			}
-			publish()
-			if s.State().Busy {
-				t.Fatal("store is still busy after publication")
+			s.SetCloseToTray(true)
+			unblock.Do(func() { close(release) })
+			state = nextSettingsState(t, updates)
+			if value := <-saved; value.Theme != "dark" || value.CloseToTray {
+				t.Fatalf("unexpected saved settings: %+v", value)
+			}
+			if state.Busy {
+				t.Fatal("store is still busy after persistence")
 			}
 			if tt.err != nil {
-				if s.State().Value != initial || s.State().Message != tt.err.Error() {
-					t.Fatalf("unexpected failure state: %+v", s.State())
+				if state.Value != initial || state.Message != tt.err.Error() {
+					t.Fatalf("unexpected failure state: %+v", state)
 				}
 				return
 			}
-			if s.State().Value.Theme != "dark" || s.State().Message != "" {
-				t.Fatalf("unexpected saved state: %+v", s.State())
+			if state.Value.Theme != "dark" || state.Message != "" {
+				t.Fatalf("unexpected saved state: %+v", state)
 			}
 			s.SetCloseToTray(true)
-			nextSettingsUpdate(t, updates)()
-			if !s.State().Value.CloseToTray || s.State().Value.Theme != "dark" {
-				t.Fatalf("unexpected tray state: %+v", s.State())
+			nextSettingsState(t, updates)
+			state = nextSettingsState(t, updates)
+			if !state.Value.CloseToTray || state.Value.Theme != "dark" {
+				t.Fatalf("unexpected tray state: %+v", state)
 			}
 		})
 	}
 }
 
-func TestSettingsCloseSuppressesQueuedPublication(t *testing.T) {
-	updates := make(chan func(), 1)
-	saves := 0
+func TestSettingsCloseSuppressesPublication(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var unblock sync.Once
+	var saves, notifications atomic.Int32
 	initial := model.Settings{Theme: "system"}
 	service := settingsServiceFunc(func(model.Settings) error {
-		saves++
+		saves.Add(1)
+		close(started)
+		<-release
 		return nil
 	})
-	s := NewSettingsStore(service, func(fn func()) { updates <- fn }, initial)
-	defer func() { s.Close(); s.Wait() }()
+	s := NewSettingsStore(service, initial)
+	defer func() {
+		unblock.Do(func() { close(release) })
+		s.Close()
+		s.Wait()
+	}()
+	s.Subscribe(func() { notifications.Add(1) })
 	s.SetTheme("dark")
-	publish := nextSettingsUpdate(t, updates)
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for save")
+	}
+	s.Close()
+	s.Subscribe(func() { notifications.Add(1) })()
+	unblock.Do(func() { close(release) })
+	s.Wait()
+	s.SetCloseToTray(true)
+	s.SetTrayError(errors.New("tray failed"))
+}
+
+func TestSettingsSubscriptionsAndSnapshot(t *testing.T) {
+	s := NewSettingsStore(settingsServiceFunc(func(model.Settings) error { return nil }), model.Settings{Theme: "system"})
+	defer func() { s.Close(); s.Wait() }()
+	var first, second int
+	unsubscribe := s.Subscribe(func() {
+		first++
+		_ = s.State()
+	})
+	s.Subscribe(func() { second++ })
+	if first != 0 || second != 0 {
+		t.Fatal("subscription sent an initial notification")
+	}
+	s.SetTrayError(errors.New("tray failed"))
+	unsubscribe()
+	unsubscribe()
+	s.SetTrayError(errors.New("another failure"))
+	if first != 1 || second != 2 {
+		t.Fatalf("unexpected notifications after unsubscribe: %d, %d", first, second)
+	}
+	snapshot := s.State()
+	snapshot.Value.Theme = "dark"
+	if s.State().Value.Theme != "system" {
+		t.Fatal("modifying snapshot changed store state")
+	}
+}
+
+func TestSettingsConcurrentCommandsAndClose(t *testing.T) {
+	s := NewSettingsStore(settingsServiceFunc(func(model.Settings) error { return nil }), model.Settings{})
+	var callers sync.WaitGroup
+	for range 16 {
+		callers.Go(func() {
+			for range 50 {
+				unsubscribe := s.Subscribe(func() { _ = s.State() })
+				s.SetTheme("dark")
+				s.SetCloseToTray(true)
+				s.SetTrayError(errors.New("tray failed"))
+				unsubscribe()
+			}
+		})
+	}
+	callers.Go(func() { s.Close(); s.Wait() })
+	callers.Wait()
 	s.Close()
 	s.Wait()
-	publish()
-	s.SetCloseToTray(true)
-	if s.State().Value != initial || saves != 1 {
-		t.Fatalf("closed store changed state or saved again: %+v, saves=%d", s.State(), saves)
-	}
 }

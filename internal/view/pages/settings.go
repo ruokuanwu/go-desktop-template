@@ -43,12 +43,11 @@ func (v *SettingsPage) Render(c *ui.Context) {
 	ui.Row(c).Gap(12).Children(func() {
 		enabled := state.Value.CloseToTray
 		choice.Switch(c.Key("close-to-tray"), &enabled, choice.SwitchProps{}).
-			Label("关闭到系统托盘").Disabled(state.Busy || state.TrayMessage != "").
+			Label("关闭到系统托盘").Disabled(state.Busy).
 			OnClick(func() { v.settings.SetCloseToTray(enabled) })
 		ui.Text(c, "关闭到系统托盘")
 	})
 	ui.Text(c, "关闭窗口后继续在后台运行，可从托盘显示或退出。").Wrap().TextColor(tk.TextSecondary)
-	ui.Text(c, state.TrayMessage).Wrap().TextColor(tk.Error)
 	ui.Text(c, "本地数据目录").FontSize(18).Bold()
 	ui.Text(c, "任务保存在 data.db；关闭程序后可复制此文件备份。").Wrap().TextColor(tk.TextSecondary)
 	ui.Text(c, "纯 Go 原生界面，无 WebView，无本地 HTTP 服务。").Wrap().TextColor(tk.TextSecondary)
