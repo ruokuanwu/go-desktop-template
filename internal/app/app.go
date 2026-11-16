@@ -13,7 +13,6 @@ import (
 	"go-desktop-template/internal/desktop"
 	"go-desktop-template/internal/pkg/logger"
 	"go-desktop-template/internal/repository"
-	"go-desktop-template/internal/service"
 	"go-desktop-template/internal/store"
 )
 
@@ -24,11 +23,16 @@ func Run() (runErr error) {
 	}
 	base = filepath.Join(base, "go-desktop-template")
 
-	settings := service.NewSettingsService(filepath.Join(base, "settings.json"))
+	settings := repository.NewSettingsRepository(filepath.Join(base, "settings.json"))
 	preferences, err := settings.Load()
 	if err != nil {
 		return fmt.Errorf("load settings: %w", err)
 	}
+	settingsStore, err := store.NewSettingsStore(settings, preferences)
+	if err != nil {
+		return fmt.Errorf("validate settings: %w", err)
+	}
+	defer func() { settingsStore.Close(); settingsStore.Wait() }()
 	log, closeLogger, err := logger.New(filepath.Join(base, "logs"), preferences.Log)
 	if err != nil {
 		return fmt.Errorf("initialize logger: %w", err)
@@ -48,12 +52,9 @@ func Run() (runErr error) {
 		return fmt.Errorf("load todos: %w", err)
 	}
 	todoStore := store.NewTodoStore(todos, items)
-	settingsStore := store.NewSettingsStore(settings, preferences)
 	defer func() {
 		todoStore.Close()
-		settingsStore.Close()
 		todoStore.Wait()
-		settingsStore.Wait()
 	}()
 	return desktop.Run(desktop.Options{
 		Todos:    todoStore,

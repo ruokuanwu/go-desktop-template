@@ -2,6 +2,10 @@ package store
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+
+	"go-desktop-template/internal/repository"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -10,9 +14,9 @@ import (
 	"go-desktop-template/internal/model"
 )
 
-type settingsServiceFunc func(model.Settings) error
+type settingsRepositoryFunc func(model.Settings) error
 
-func (f settingsServiceFunc) Save(value model.Settings) error { return f(value) }
+func (f settingsRepositoryFunc) Save(value model.Settings) error { return f(value) }
 
 func nextSettingsState(t *testing.T, updates <-chan SettingsState) SettingsState {
 	t.Helper()
@@ -38,13 +42,13 @@ func TestSettingsCommandsPublishAfterPersistence(t *testing.T) {
 			saved := make(chan model.Settings, 1)
 			release := make(chan struct{})
 			var unblock sync.Once
-			initial := model.Settings{Theme: "system"}
-			service := settingsServiceFunc(func(value model.Settings) error {
+			initial := model.Settings{Theme: "system", Log: model.LogSettings{Level: "info"}}
+			repo := settingsRepositoryFunc(func(value model.Settings) error {
 				saved <- value
 				<-release
 				return tt.err
 			})
-			s := NewSettingsStore(service, initial)
+			s := newSettingsStore(t, repo, initial)
 			defer func() {
 				unblock.Do(func() { close(release) })
 				s.Close()
@@ -90,14 +94,14 @@ func TestSettingsCloseSuppressesPublication(t *testing.T) {
 	release := make(chan struct{})
 	var unblock sync.Once
 	var saves, notifications atomic.Int32
-	initial := model.Settings{Theme: "system"}
-	service := settingsServiceFunc(func(model.Settings) error {
+	initial := model.Settings{Theme: "system", Log: model.LogSettings{Level: "info"}}
+	repo := settingsRepositoryFunc(func(model.Settings) error {
 		saves.Add(1)
 		close(started)
 		<-release
 		return nil
 	})
-	s := NewSettingsStore(service, initial)
+	s := newSettingsStore(t, repo, initial)
 	defer func() {
 		unblock.Do(func() { close(release) })
 		s.Close()
@@ -119,7 +123,7 @@ func TestSettingsCloseSuppressesPublication(t *testing.T) {
 }
 
 func TestSettingsSubscriptionsAndSnapshot(t *testing.T) {
-	s := NewSettingsStore(settingsServiceFunc(func(model.Settings) error { return nil }), model.Settings{Theme: "system"})
+	s := newSettingsStore(t, settingsRepositoryFunc(func(model.Settings) error { return nil }), model.Settings{Theme: "system", Log: model.LogSettings{Level: "info"}})
 	defer func() { s.Close(); s.Wait() }()
 	var first, second int
 	unsubscribe := s.Subscribe(func(state SettingsState) {
@@ -146,7 +150,7 @@ func TestSettingsSubscriptionsAndSnapshot(t *testing.T) {
 }
 
 func TestSettingsConcurrentCommandsAndClose(t *testing.T) {
-	s := NewSettingsStore(settingsServiceFunc(func(model.Settings) error { return nil }), model.Settings{})
+	s := newSettingsStore(t, settingsRepositoryFunc(func(model.Settings) error { return nil }), model.Settings{Theme: "system", Log: model.LogSettings{Level: "info"}})
 	var callers sync.WaitGroup
 	for range 16 {
 		callers.Go(func() {
@@ -163,4 +167,66 @@ func TestSettingsConcurrentCommandsAndClose(t *testing.T) {
 	callers.Wait()
 	s.Close()
 	s.Wait()
+}
+
+func newSettingsStore(t *testing.T, repo SettingsRepository, initial model.Settings) *SettingsStore {
+	t.Helper()
+	s, err := NewSettingsStore(repo, initial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+func TestSettingsLoadRejectsInvalidFile(t *testing.T) {
+	for _, data := range []string{`{"theme":"invalid"}`, `{"log":{"max_age":-1}}`, `{"log":{"level":"invalid"}}`} {
+		t.Run(data, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "settings.json")
+			if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			repo := repository.NewSettingsRepository(path)
+			value, err := repo.Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s, err := NewSettingsStore(repo, value); err == nil {
+				s.Close()
+				s.Wait()
+				t.Fatal("invalid settings accepted")
+			}
+		})
+	}
+}
+
+func TestSettingsSaveRejectsInvalidSettings(t *testing.T) {
+	for _, value := range []model.Settings{
+		{Theme: "invalid", Log: model.LogSettings{Level: "info"}},
+		{Theme: "system", Log: model.LogSettings{MaxAge: -1, Level: "info"}},
+		{Theme: "system", Log: model.LogSettings{MaxAge: 7, Level: "invalid"}},
+	} {
+		t.Run(value.Theme+value.Log.Level, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "settings.json")
+			repo := repository.NewSettingsRepository(path)
+			initial, err := repo.Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := repo.Save(initial); err != nil {
+				t.Fatal(err)
+			}
+			s := newSettingsStore(t, repo, initial)
+			defer func() { s.Close(); s.Wait() }()
+			s.saveValue(func(settings *model.Settings) { *settings = value })
+			s.workers.Wait()
+			state := s.State()
+			if state.Busy || state.Message == "" || state.Value != initial {
+				t.Fatalf("invalid save changed state: %+v", state)
+			}
+			persisted, err := repo.Load()
+			if err != nil || persisted != initial {
+				t.Fatalf("invalid save changed persisted settings: value=%+v, err=%v", persisted, err)
+			}
+		})
+	}
 }

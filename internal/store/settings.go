@@ -2,7 +2,10 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"sync"
+
+	"go.uber.org/zap/zapcore"
 
 	"go-desktop-template/internal/model"
 )
@@ -13,12 +16,12 @@ type SettingsState struct {
 	Message string
 }
 
-type SettingsService interface {
+type SettingsRepository interface {
 	Save(model.Settings) error
 }
 
 type SettingsStore struct {
-	service     SettingsService
+	repo        SettingsRepository
 	ctx         context.Context
 	cancel      context.CancelFunc
 	workers     sync.WaitGroup
@@ -28,12 +31,15 @@ type SettingsStore struct {
 	nextID      uint64
 }
 
-func NewSettingsStore(service SettingsService, initial model.Settings) *SettingsStore {
+func NewSettingsStore(repo SettingsRepository, initial model.Settings) (*SettingsStore, error) {
+	if err := validateSettings(initial); err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &SettingsStore{
-		service: service, ctx: ctx, cancel: cancel,
+		repo: repo, ctx: ctx, cancel: cancel,
 		state: SettingsState{Value: initial}, subscribers: make(map[uint64]func(SettingsState)),
-	}
+	}, nil
 }
 
 // State returns a snapshot safe to read and modify independently.
@@ -113,7 +119,10 @@ func (s *SettingsStore) saveValue(change func(*model.Settings)) {
 		defer s.workers.Done()
 		err := s.ctx.Err()
 		if err == nil {
-			err = s.service.Save(value)
+			err = validateSettings(value)
+		}
+		if err == nil {
+			err = s.repo.Save(value)
 		}
 		s.mu.Lock()
 		if s.ctx.Err() != nil {
@@ -144,4 +153,20 @@ func (s *SettingsStore) notificationLocked() func() {
 			fn(state)
 		}
 	}
+}
+
+func validateSettings(value model.Settings) error {
+	switch value.Theme {
+	case "system", "light", "dark":
+	default:
+		return fmt.Errorf("invalid theme: %s", value.Theme)
+	}
+	if value.Log.MaxAge < 0 {
+		return fmt.Errorf("log max_age must not be negative")
+	}
+	var level zapcore.Level
+	if err := level.UnmarshalText([]byte(value.Log.Level)); err != nil {
+		return fmt.Errorf("invalid log level: %w", err)
+	}
+	return nil
 }
