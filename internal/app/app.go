@@ -14,6 +14,7 @@ import (
 	"go-desktop-template/internal/pkg/logger"
 	"go-desktop-template/internal/repository"
 	"go-desktop-template/internal/service"
+	"go-desktop-template/internal/store"
 )
 
 func Run() (runErr error) {
@@ -46,10 +47,16 @@ func Run() (runErr error) {
 	if err != nil {
 		return fmt.Errorf("load todos: %w", err)
 	}
+	todoStore := store.NewTodoStore(todos, items)
+	settingsStore := store.NewSettingsStore(settings, preferences)
+	defer func() {
+		todoStore.Close()
+		settingsStore.Close()
+		todoStore.Wait()
+		settingsStore.Wait()
+	}()
 	return desktop.Run(desktop.Options{
-		Todos:       todos,
-		Items:       items,
-		Settings:    settings,
-		Preferences: preferences,
+		Todos:    todoStore,
+		Settings: settingsStore,
 	})
 }

@@ -15,16 +15,19 @@ import (
 
 type TodoPage struct {
 	todos                 *store.TodoStore
+	update                func(func())
 	title, search, filter string
 }
 
-func NewTodoPage(todos *store.TodoStore) TodoPage {
-	return TodoPage{todos: todos, filter: "全部"}
+func NewTodoPage(todos *store.TodoStore, update func(func())) TodoPage {
+	return TodoPage{todos: todos, update: update, filter: "全部"}
 }
 
 func (v *TodoPage) Render(c *ui.Context) {
 	state := v.todos.State()
-	add := func() { v.todos.Add(v.title, func() { v.title = "" }) }
+	add := func() {
+		v.todos.Add(v.title, func() { v.update(func() { v.title = "" }) })
+	}
 	total, completed := counts(state.Items)
 	tk := theme.TokensOf(c)
 	ui.Row(c).FillWidth().Height(32).Gap(12).Children(func() {

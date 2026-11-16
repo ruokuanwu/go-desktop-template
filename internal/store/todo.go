@@ -21,85 +21,160 @@ type TodoState struct {
 }
 
 type TodoStore struct {
-	service TodoService
-	update  func(func())
-	ctx     context.Context
-	cancel  context.CancelFunc
-	workers sync.WaitGroup
-	state   TodoState
+	service     TodoService
+	ctx         context.Context
+	cancel      context.CancelFunc
+	workers     sync.WaitGroup
+	mu          sync.RWMutex
+	state       TodoState
+	subscribers map[uint64]func()
+	nextID      uint64
 }
 
-func NewTodoStore(service TodoService, update func(func()), items []model.Todo) *TodoStore {
+func NewTodoStore(service TodoService, items []model.Todo) *TodoStore {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &TodoStore{service: service, update: update, ctx: ctx, cancel: cancel, state: TodoState{Items: items}}
+	return &TodoStore{
+		service: service, ctx: ctx, cancel: cancel,
+		state: TodoState{Items: slices.Clone(items)}, subscribers: make(map[uint64]func()),
+	}
 }
 
-// State is read on the UI thread; callers must not mutate the returned items.
-func (s *TodoStore) State() TodoState { return s.state }
+// State returns a snapshot, including an independent copy of the items.
+func (s *TodoStore) State() TodoState {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	state := s.state
+	state.Items = slices.Clone(state.Items)
+	return state
+}
 
-// Close stops accepting commands and cancels workers. Call it on the UI thread.
-func (s *TodoStore) Close() { s.cancel() }
+// Subscribe registers a change notification without an initial notification.
+// Callbacks run synchronously on the notifying goroutine, outside the lock;
+// they must be concurrency-safe and nonblocking. Unsubscribe is idempotent
+// but does not stop callbacks already captured for notification.
+func (s *TodoStore) Subscribe(fn func()) func() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ctx.Err() != nil {
+		return func() {}
+	}
+	s.nextID++
+	id := s.nextID
+	s.subscribers[id] = fn
+	return func() {
+		s.mu.Lock()
+		delete(s.subscribers, id)
+		s.mu.Unlock()
+	}
+}
 
-// Wait waits for workers, not queued UI callbacks. Call it after Close, off the UI thread.
+// Close stops accepting commands and cancels workers. In-flight results are
+// discarded. Notifications already captured may still run.
+func (s *TodoStore) Close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cancel()
+	clear(s.subscribers)
+}
+
+// Wait waits for workers, notifications and success callbacks. Call it after
+// Close, off the UI thread and outside subscription or success callbacks.
 func (s *TodoStore) Wait() { s.workers.Wait() }
 
-// Commands and published callbacks run on the UI thread.
-func (s *TodoStore) mutate(work func(context.Context) error, success func()) {
+// work persists changes and updates a private snapshot without holding mu.
+// The snapshot is committed only if work succeeds and the store is still open.
+func (s *TodoStore) mutate(work func(context.Context, *TodoState) error, success func()) {
+	s.mu.Lock()
 	if s.ctx.Err() != nil {
-		s.state.Message = "任务存储已关闭，无法执行操作。"
+		s.mu.Unlock()
 		return
 	}
 	if s.state.Busy {
 		s.state.Message = "正在保存任务，请稍后重试。"
+		notify := s.notificationLocked()
+		s.mu.Unlock()
+		notify()
 		return
 	}
 	s.state.Busy, s.state.Message = true, ""
+	state := s.state
+	state.Items = slices.Clone(state.Items)
 	s.workers.Add(1)
+	notify := s.notificationLocked()
+	s.mu.Unlock()
+	notify()
 	go func() {
 		defer s.workers.Done()
-		err := work(s.ctx)
-		s.update(func() {
-			if s.ctx.Err() != nil {
-				return
-			}
-			s.state.Busy = false
-			if err != nil {
-				s.state.Message = err.Error()
-				return
-			}
+		err := work(s.ctx, &state)
+		s.mu.Lock()
+		if s.ctx.Err() != nil {
+			s.mu.Unlock()
+			return
+		}
+		s.state.Busy = false
+		if err != nil {
+			s.state.Message = err.Error()
+		} else {
 			s.state.Message = ""
+			s.state.Items = state.Items
+		}
+		notify := s.notificationLocked()
+		s.mu.Unlock()
+		if err == nil && success != nil {
 			success()
-		})
+		}
+		notify()
 	}()
 }
 
-func (s *TodoStore) Add(title string, success func()) {
-	var created model.Todo
-	s.mutate(func(ctx context.Context) error {
-		var err error
-		created, err = s.service.Create(ctx, title)
-		return err
-	}, func() {
-		s.state.Items = append(s.state.Items, created)
-		if success != nil {
-			success()
+// notificationLocked captures subscribers while mu is held.
+func (s *TodoStore) notificationLocked() func() {
+	callbacks := make([]func(), 0, len(s.subscribers))
+	for _, fn := range s.subscribers {
+		callbacks = append(callbacks, fn)
+	}
+	return func() {
+		for _, fn := range callbacks {
+			fn()
 		}
-	})
+	}
+}
+
+// Add invokes success on the worker after publication, outside the lock.
+// UI callbacks must schedule their changes on the UI thread. A callback already
+// committed with the result may still run after Close.
+func (s *TodoStore) Add(title string, success func()) {
+	s.mutate(func(ctx context.Context, state *TodoState) error {
+		created, err := s.service.Create(ctx, title)
+		if err != nil {
+			return err
+		}
+		state.Items = append(state.Items, created)
+		return nil
+	}, success)
 }
 
 func (s *TodoStore) SetCompleted(id int64, completed bool) {
-	s.mutate(func(ctx context.Context) error { return s.service.SetCompleted(ctx, id, completed) }, func() {
-		for i := range s.state.Items {
-			if s.state.Items[i].ID == id {
-				s.state.Items[i].Completed = completed
+	s.mutate(func(ctx context.Context, state *TodoState) error {
+		if err := s.service.SetCompleted(ctx, id, completed); err != nil {
+			return err
+		}
+		for i := range state.Items {
+			if state.Items[i].ID == id {
+				state.Items[i].Completed = completed
 				break
 			}
 		}
-	})
+		return nil
+	}, nil)
 }
 
 func (s *TodoStore) Delete(id int64) {
-	s.mutate(func(ctx context.Context) error { return s.service.Delete(ctx, id) }, func() {
-		s.state.Items = slices.DeleteFunc(s.state.Items, func(item model.Todo) bool { return item.ID == id })
-	})
+	s.mutate(func(ctx context.Context, state *TodoState) error {
+		if err := s.service.Delete(ctx, id); err != nil {
+			return err
+		}
+		state.Items = slices.DeleteFunc(state.Items, func(item model.Todo) bool { return item.ID == id })
+		return nil
+	}, nil)
 }

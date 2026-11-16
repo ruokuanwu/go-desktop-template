@@ -5,7 +5,6 @@ import (
 	"github.com/egoist/mygo/ui"
 	"go.uber.org/zap"
 
-	"go-desktop-template/internal/model"
 	"go-desktop-template/internal/pkg/gtkfix"
 	"go-desktop-template/internal/store"
 	"go-desktop-template/internal/view"
@@ -19,30 +18,19 @@ type desktop struct {
 	quitting bool
 }
 
+// Options provides application-owned stores; Run does not close them.
 type Options struct {
-	Todos       store.TodoService
-	Items       []model.Todo
-	Settings    store.SettingsService
-	Preferences model.Settings
+	Todos    *store.TodoStore
+	Settings *store.SettingsStore
 }
 
 func Run(opts Options) error {
-	d := &desktop{}
-	defer func() {
-		if d.todos != nil {
-			d.todos.Close()
-			d.todos.Wait()
-		}
-		if d.settings != nil {
-			d.settings.Close()
-			d.settings.Wait()
-		}
-	}()
-	mygo.App.WhenReady(func() { d.ready(opts) })
+	d := &desktop{todos: opts.Todos, settings: opts.Settings}
+	mygo.App.WhenReady(d.ready)
 	return mygo.App.Run()
 }
 
-func (d *desktop) ready(opts Options) {
+func (d *desktop) ready() {
 	if err := gtkfix.TextColor(); err != nil {
 		zap.L().Warn("apply text color workaround", zap.Error(err))
 	}
@@ -52,15 +40,13 @@ func (d *desktop) ready(opts Options) {
 		MinWidth: 720, MinHeight: 520,
 		StateKey: "main", Content: ui.View(func(c *ui.Context) { screen.Render(c) }),
 	})
-	d.todos = store.NewTodoStore(opts.Todos, d.window.Update, opts.Items)
-	d.settings = store.NewSettingsStore(opts.Settings, opts.Preferences)
+	unsubscribeTodos := d.todos.Subscribe(d.window.Invalidate)
 	unsubscribeSettings := d.settings.Subscribe(d.window.Invalidate)
 	// On the UI thread, NewWindow defers the first render until the next loop turn.
-	screen = view.New(d.todos, d.settings)
+	screen = view.New(d.todos, d.settings, d.window.Update)
 	d.window.OnClosed(func() {
+		unsubscribeTodos()
 		unsubscribeSettings()
-		d.todos.Close()
-		d.settings.Close()
 	})
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { d.quitting = true })
 	var err error
