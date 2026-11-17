@@ -2,19 +2,32 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
+	"github.com/egoist/mygo"
 	"go.uber.org/zap"
 
 	"go-desktop-template/internal/db"
-	"go-desktop-template/internal/desktop"
 	"go-desktop-template/internal/pkg/logger"
 	"go-desktop-template/internal/repository"
 	"go-desktop-template/internal/store"
 )
+
+// App owns the window, stores and resources for one application lifetime.
+type App struct {
+	window             *mygo.Window
+	tray               *mygo.Tray
+	todos              *store.TodoStore
+	settings           *store.SettingsStore
+	database           *sql.DB
+	todoRepository     *repository.TodoRepository
+	settingsRepository *repository.SettingsRepository
+	quitting           bool
+}
 
 func Run() (runErr error) {
 	base, err := os.UserConfigDir()
@@ -23,16 +36,17 @@ func Run() (runErr error) {
 	}
 	base = filepath.Join(base, "go-desktop-template")
 
-	settings := repository.NewSettingsRepository(filepath.Join(base, "settings.json"))
-	preferences, err := settings.Load()
+	a := &App{}
+	a.settingsRepository = repository.NewSettingsRepository(filepath.Join(base, "settings.json"))
+	preferences, err := a.settingsRepository.Load()
 	if err != nil {
 		return fmt.Errorf("load settings: %w", err)
 	}
-	settingsStore, err := store.NewSettingsStore(settings, preferences)
+	a.settings, err = store.NewSettingsStore(a.settingsRepository, preferences, a.post)
 	if err != nil {
 		return fmt.Errorf("validate settings: %w", err)
 	}
-	defer func() { settingsStore.Close(); settingsStore.Wait() }()
+	defer func() { a.settings.Close(); a.settings.Wait() }()
 	log, closeLogger, err := logger.New(filepath.Join(base, "logs"), preferences.Log)
 	if err != nil {
 		return fmt.Errorf("initialize logger: %w", err)
@@ -41,23 +55,28 @@ func Run() (runErr error) {
 	restoreLogger := zap.ReplaceGlobals(log)
 	defer restoreLogger()
 	dataPath := filepath.Join(base, "data.db")
-	database, err := db.Open(dataPath)
+	a.database, err = db.Open(dataPath)
 	if err != nil {
 		return err
 	}
-	defer database.Close()
-	todos := repository.NewTodoRepository(database)
-	items, err := todos.List(context.Background())
+	defer a.database.Close()
+	a.todoRepository = repository.NewTodoRepository(a.database)
+	items, err := a.todoRepository.List(context.Background())
 	if err != nil {
 		return fmt.Errorf("load todos: %w", err)
 	}
-	todoStore := store.NewTodoStore(todos, items)
+	a.todos = store.NewTodoStore(a.todoRepository, items, a.post)
 	defer func() {
-		todoStore.Close()
-		todoStore.Wait()
+		a.todos.Close()
+		a.todos.Wait()
 	}()
-	return desktop.Run(desktop.Options{
-		Todos:    todoStore,
-		Settings: settingsStore,
+	mygo.App.WhenReady(a.ready)
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
+		a.quitting = true
 	})
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
+		a.todos.Close()
+		a.settings.Close()
+	})
+	return mygo.App.Run()
 }

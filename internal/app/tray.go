@@ -1,4 +1,4 @@
-package desktop
+package app
 
 import (
 	"github.com/egoist/mygo"

@@ -20,79 +20,34 @@ type SettingsRepository interface {
 	Save(model.Settings) error
 }
 
+// SettingsStore owns UI state. Commands, State and Close run on the UI thread.
+// post must asynchronously dispatch to that thread and request a redraw.
 type SettingsStore struct {
-	repo        SettingsRepository
-	ctx         context.Context
-	cancel      context.CancelFunc
-	workers     sync.WaitGroup
-	mu          sync.RWMutex
-	state       SettingsState
-	subscribers map[uint64]func(SettingsState)
-	nextID      uint64
+	repo    SettingsRepository
+	post    func(func())
+	ctx     context.Context
+	cancel  context.CancelFunc
+	workers sync.WaitGroup
+	state   SettingsState
 }
 
-func NewSettingsStore(repo SettingsRepository, initial model.Settings) (*SettingsStore, error) {
+func NewSettingsStore(repo SettingsRepository, initial model.Settings, post func(func())) (*SettingsStore, error) {
 	if err := validateSettings(initial); err != nil {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &SettingsStore{
-		repo: repo, ctx: ctx, cancel: cancel,
-		state: SettingsState{Value: initial}, subscribers: make(map[uint64]func(SettingsState)),
-	}, nil
+	return &SettingsStore{repo: repo, post: post, ctx: ctx, cancel: cancel, state: SettingsState{Value: initial}}, nil
 }
 
-// State returns a snapshot safe to read and modify independently.
-func (s *SettingsStore) State() SettingsState {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.state
-}
+// State returns shared UI-thread state, not an independent snapshot.
+func (s *SettingsStore) State() *SettingsState { return &s.state }
 
-// Subscribe delivers an independent state snapshot for each change, without an initial notification.
-// Callbacks run synchronously on the notifying goroutine, outside the lock;
-// they must be concurrency-safe and nonblocking. Concurrent notifications may
-// arrive out of order. Unsubscribe is idempotent but does not stop callbacks
-// already captured for notification.
-func (s *SettingsStore) Subscribe(fn func(SettingsState)) func() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.ctx.Err() != nil {
-		return func() {}
-	}
-	s.nextID++
-	id := s.nextID
-	s.subscribers[id] = fn
-	return func() {
-		s.mu.Lock()
-		delete(s.subscribers, id)
-		s.mu.Unlock()
-	}
-}
+// Close rejects new commands and queued results. Call it on the UI thread.
+func (s *SettingsStore) Close() { s.cancel() }
 
-// Close stops accepting commands and cancels workers. In-flight saves may finish,
-// but their results are discarded. Notifications already captured may still run.
-func (s *SettingsStore) Close() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.cancel()
-	clear(s.subscribers)
-}
-
-// Wait waits for workers and their notifications. Call it after Close,
-// off the UI thread and outside subscription callbacks.
+// Wait waits for background I/O, not queued UI callbacks. Call after Close,
+// outside the UI thread so shutdown cannot block event processing.
 func (s *SettingsStore) Wait() { s.workers.Wait() }
-
-func (s *SettingsStore) SetTrayError(err error) {
-	s.mu.Lock()
-	if s.ctx.Err() != nil {
-		s.mu.Unlock()
-		return
-	}
-	notify := s.notificationLocked()
-	s.mu.Unlock()
-	notify()
-}
 
 func (s *SettingsStore) SetTheme(theme string) {
 	s.saveValue(func(value *model.Settings) { value.Theme = theme })
@@ -103,18 +58,13 @@ func (s *SettingsStore) SetCloseToTray(enabled bool) {
 }
 
 func (s *SettingsStore) saveValue(change func(*model.Settings)) {
-	s.mu.Lock()
 	if s.state.Busy || s.ctx.Err() != nil {
-		s.mu.Unlock()
 		return
 	}
 	value := s.state.Value
 	change(&value)
 	s.state.Busy, s.state.Message = true, ""
 	s.workers.Add(1)
-	notify := s.notificationLocked()
-	s.mu.Unlock()
-	notify()
 	go func() {
 		defer s.workers.Done()
 		err := s.ctx.Err()
@@ -124,35 +74,18 @@ func (s *SettingsStore) saveValue(change func(*model.Settings)) {
 		if err == nil {
 			err = s.repo.Save(value)
 		}
-		s.mu.Lock()
-		if s.ctx.Err() != nil {
-			s.mu.Unlock()
-			return
-		}
-		s.state.Busy = false
-		if err != nil {
-			s.state.Message = err.Error()
-		} else {
-			s.state.Value = value
-		}
-		notify := s.notificationLocked()
-		s.mu.Unlock()
-		notify()
+		s.post(func() {
+			if s.ctx.Err() != nil {
+				return
+			}
+			s.state.Busy = false
+			if err != nil {
+				s.state.Message = err.Error()
+			} else {
+				s.state.Value = value
+			}
+		})
 	}()
-}
-
-// notificationLocked captures the state and subscribers while mu is held.
-func (s *SettingsStore) notificationLocked() func() {
-	state := s.state
-	callbacks := make([]func(SettingsState), 0, len(s.subscribers))
-	for _, fn := range s.subscribers {
-		callbacks = append(callbacks, fn)
-	}
-	return func() {
-		for _, fn := range callbacks {
-			fn(state)
-		}
-	}
 }
 
 func validateSettings(value model.Settings) error {
