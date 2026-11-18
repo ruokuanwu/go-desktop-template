@@ -29,12 +29,8 @@ func (v *SettingsPage) Render(c *ui.Context, tr *i18n.Translator) {
 		ui.Column(c).FillWidth().Gap(20).Children(func() {
 			ui.Column(c).FillWidth().Padding(20).Gap(12).Radius(12).Background(tk.BgContainer).Border(1, tk.BorderSecondary).Children(func() {
 				ui.Text(c, tr.T("settings.appearance")).FontSize(14).FontWeight(600)
-				description := tr.T("settings.autoSave")
-				if state.Busy {
-					description = tr.T("settings.saving")
-				}
 				ui.Row(c).FillWidth().Height(32).Gap(12).Children(func() {
-					ui.Text(c, description).TextColor(tk.TextSecondary)
+					ui.Text(c, tr.T("settings.autoSave")).TextColor(tk.TextSecondary)
 					message := ""
 					if state.Message != "" {
 						message = tr.T("error.settings")
@@ -48,7 +44,7 @@ func (v *SettingsPage) Render(c *ui.Context, tr *i18n.Translator) {
 							variant = action.Filled
 						}
 						c.Key(option.value)
-						action.Button(c, option.label, action.ButtonProps{Variant: variant}).Disabled(state.Busy).OnClick(func() { v.settings.SetTheme(option.value) })
+						action.Button(c, option.label, action.ButtonProps{Variant: variant}).OnClick(func() { v.settings.SetTheme(option.value) })
 					}
 				})
 			})
@@ -61,7 +57,7 @@ func (v *SettingsPage) Render(c *ui.Context, tr *i18n.Translator) {
 						if state.Value.Language == option.value || state.Value.Language == "" && option.value == "system" {
 							variant = action.Filled
 						}
-						action.Button(c.Key("language-"+option.value), option.label, action.ButtonProps{Variant: variant}).Disabled(state.Busy).OnClick(func() { v.settings.SetLanguage(option.value) })
+						action.Button(c.Key("language-"+option.value), option.label, action.ButtonProps{Variant: variant}).OnClick(func() { v.settings.SetLanguage(option.value) })
 					}
 				})
 			})
@@ -70,7 +66,7 @@ func (v *SettingsPage) Render(c *ui.Context, tr *i18n.Translator) {
 				ui.Row(c).Gap(12).Children(func() {
 					enabled := state.Value.CloseToTray
 					choice.Switch(c.Key("close-to-tray"), &enabled, choice.SwitchProps{}).
-						Label(tr.T("settings.closeToTray")).Disabled(state.Busy).
+						Label(tr.T("settings.closeToTray")).
 						OnClick(func() { v.settings.SetCloseToTray(enabled) })
 					ui.Text(c, tr.T("settings.closeToTray"))
 				})
