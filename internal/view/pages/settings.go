@@ -6,6 +6,7 @@ import (
 	"github.com/lobehub/lobe-mygo/pkg/choice"
 	"github.com/lobehub/lobe-mygo/pkg/theme"
 
+	"go-desktop-template/internal/pkg/i18n"
 	"go-desktop-template/internal/store"
 )
 
@@ -17,27 +18,31 @@ func NewSettingsPage(settings *store.SettingsStore) SettingsPage {
 	return SettingsPage{settings: settings}
 }
 
-func (v *SettingsPage) Render(c *ui.Context) {
+func (v *SettingsPage) Render(c *ui.Context, tr *i18n.Translator) {
 	state := v.settings.State()
 	tk := theme.TokensOf(c)
 	ui.Column(c).Gap(8).Children(func() {
-		ui.Text(c, "偏好设置").FontSize(24).FontWeight(600)
-		ui.Text(c, "按你的习惯，安排工作空间。").FontSize(13).TextColor(tk.TextSecondary)
+		ui.Text(c, tr.T("settings.title")).FontSize(24).FontWeight(600)
+		ui.Text(c, tr.T("settings.subtitle")).FontSize(13).TextColor(tk.TextSecondary)
 	})
 	ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
 		ui.Column(c).FillWidth().Gap(20).Children(func() {
 			ui.Column(c).FillWidth().Padding(20).Gap(12).Radius(12).Background(tk.BgContainer).Border(1, tk.BorderSecondary).Children(func() {
-				ui.Text(c, "外观").FontSize(14).FontWeight(600)
-				description := "设置自动保存在本机。"
+				ui.Text(c, tr.T("settings.appearance")).FontSize(14).FontWeight(600)
+				description := tr.T("settings.autoSave")
 				if state.Busy {
-					description = "正在保存设置…"
+					description = tr.T("settings.saving")
 				}
 				ui.Row(c).FillWidth().Height(32).Gap(12).Children(func() {
 					ui.Text(c, description).TextColor(tk.TextSecondary)
-					ui.Text(c, state.Message).Grow(1).MinWidth(0).SingleLine().TextColor(tk.Error)
+					message := ""
+					if state.Message != "" {
+						message = tr.T("error.settings")
+					}
+					ui.Text(c, message).Grow(1).MinWidth(0).SingleLine().TextColor(tk.Error)
 				})
 				ui.Row(c).Gap(10).Children(func() {
-					for _, option := range []struct{ label, value string }{{"跟随系统", "system"}, {"浅色", "light"}, {"深色", "dark"}} {
+					for _, option := range []struct{ label, value string }{{tr.T("common.system"), "system"}, {tr.T("theme.light"), "light"}, {tr.T("theme.dark"), "dark"}} {
 						variant := action.Default
 						if state.Value.Theme == option.value {
 							variant = action.Filled
@@ -48,20 +53,33 @@ func (v *SettingsPage) Render(c *ui.Context) {
 				})
 			})
 			ui.Column(c).FillWidth().Padding(20).Gap(12).Radius(12).Background(tk.BgContainer).Border(1, tk.BorderSecondary).Children(func() {
-				ui.Text(c, "窗口行为").FontSize(14).FontWeight(600)
+				ui.Text(c, tr.T("settings.language")).FontSize(14).FontWeight(600)
+				ui.Text(c, tr.T("settings.languageHint")).Wrap().TextColor(tk.TextSecondary)
+				ui.Row(c).Gap(10).Children(func() {
+					for _, option := range []struct{ label, value string }{{tr.T("common.system"), "system"}, {"简体中文", "zh-CN"}, {"English", "en"}} {
+						variant := action.Default
+						if state.Value.Language == option.value || state.Value.Language == "" && option.value == "system" {
+							variant = action.Filled
+						}
+						action.Button(c.Key("language-"+option.value), option.label, action.ButtonProps{Variant: variant}).Disabled(state.Busy).OnClick(func() { v.settings.SetLanguage(option.value) })
+					}
+				})
+			})
+			ui.Column(c).FillWidth().Padding(20).Gap(12).Radius(12).Background(tk.BgContainer).Border(1, tk.BorderSecondary).Children(func() {
+				ui.Text(c, tr.T("settings.window")).FontSize(14).FontWeight(600)
 				ui.Row(c).Gap(12).Children(func() {
 					enabled := state.Value.CloseToTray
 					choice.Switch(c.Key("close-to-tray"), &enabled, choice.SwitchProps{}).
-						Label("关闭到系统托盘").Disabled(state.Busy).
+						Label(tr.T("settings.closeToTray")).Disabled(state.Busy).
 						OnClick(func() { v.settings.SetCloseToTray(enabled) })
-					ui.Text(c, "关闭到系统托盘")
+					ui.Text(c, tr.T("settings.closeToTray"))
 				})
-				ui.Text(c, "关闭窗口后继续在后台运行，可从托盘显示或退出。").Wrap().TextColor(tk.TextSecondary)
+				ui.Text(c, tr.T("settings.trayHint")).Wrap().TextColor(tk.TextSecondary)
 			})
 			ui.Column(c).FillWidth().Padding(20).Gap(12).Radius(12).Background(tk.BgContainer).Border(1, tk.BorderSecondary).Children(func() {
-				ui.Text(c, "本地数据").FontSize(14).FontWeight(600)
-				ui.Text(c, "任务保存在 data.db；关闭程序后可复制此文件备份。").Wrap().TextColor(tk.TextSecondary)
-				ui.Text(c, "纯 Go 原生界面，无 WebView，无本地 HTTP 服务。").Wrap().TextColor(tk.TextSecondary)
+				ui.Text(c, tr.T("settings.data")).FontSize(14).FontWeight(600)
+				ui.Text(c, tr.T("settings.backup")).Wrap().TextColor(tk.TextSecondary)
+				ui.Text(c, tr.T("settings.native")).Wrap().TextColor(tk.TextSecondary)
 			})
 		})
 	})

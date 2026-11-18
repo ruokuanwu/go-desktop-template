@@ -3,12 +3,14 @@ package view
 import (
 	"github.com/egoist/mygo/ui"
 
+	"go-desktop-template/internal/pkg/i18n"
 	"go-desktop-template/internal/store"
 	"go-desktop-template/internal/view/layouts"
 	"go-desktop-template/internal/view/pages"
 )
 
 type View struct {
+	translator   *i18n.Translator
 	settings     *store.SettingsStore
 	page         string
 	tasks        pages.TodoPage
@@ -16,14 +18,15 @@ type View struct {
 	settingsPage pages.SettingsPage
 }
 
-func NewView(todos *store.TodoStore, settings *store.SettingsStore) *View {
+func NewView(todos *store.TodoStore, settings *store.SettingsStore, translator *i18n.Translator) *View {
 	v := &View{
 		settings:     settings,
-		page:         "任务",
+		translator:   translator,
+		page:         "todos",
 		tasks:        pages.NewTodoPage(todos),
 		settingsPage: pages.NewSettingsPage(settings),
 	}
-	v.dashboard = pages.NewDashboardPage(todos, func() { v.page = "任务" })
+	v.dashboard = pages.NewDashboardPage(todos, func() { v.page = "todos" })
 	return v
 }
 
@@ -37,14 +40,14 @@ func (v *View) Render(c *ui.Context) {
 	default:
 		linearTheme.Apply(c)
 	}
-	layouts.Shell(c, v.page, func(page string) { v.page = page }, func() {
+	layouts.Shell(c, v.translator, v.page, func(page string) { v.page = page }, func() {
 		switch v.page {
-		case "概览":
-			v.dashboard.Render(c)
-		case "设置":
-			v.settingsPage.Render(c)
+		case "dashboard":
+			v.dashboard.Render(c, v.translator)
+		case "settings":
+			v.settingsPage.Render(c, v.translator)
 		default:
-			v.tasks.Render(c)
+			v.tasks.Render(c, v.translator)
 		}
 	})
 }

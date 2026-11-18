@@ -5,9 +5,12 @@ go 1.27.3
 require (
 	github.com/ebitengine/purego v0.11.1
 	github.com/egoist/mygo v0.8.4-0.20261108082913-9233663736ca
+	github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade
 	github.com/lobehub/lobe-mygo v0.0.0-20261110162706-5e5fea5ef9e2
+	github.com/nicksnyder/go-i18n/v2 v2.7.0
 	github.com/spf13/cobra v1.10.1
 	go.uber.org/zap v1.27.0
+	golang.org/x/text v0.43.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	modernc.org/sqlite v1.62.0
 )
@@ -25,7 +28,6 @@ require (
 	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
 	modernc.org/libc v1.80.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect

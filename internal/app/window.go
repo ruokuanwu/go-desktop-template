@@ -20,13 +20,13 @@ func (a *App) ready() {
 		MinWidth: 720, MinHeight: 520,
 		StateKey: "main", Content: ui.View(func(c *ui.Context) { screen.Render(c) }),
 	})
-	screen = view.NewView(a.todos, a.settings)
+	screen = view.NewView(a.todos, a.settings, a.translator)
 	a.window.OnClosed(func() {
 		a.todos.Close()
 		a.settings.Close()
 	})
 	var err error
-	a.tray, err = newTray(trayOptions{Show: a.show, Quit: mygo.App.Quit})
+	a.tray, a.trayMenu, err = newTray(trayOptions{Show: a.show, Quit: mygo.App.Quit}, a.translator)
 	if err != nil {
 		zap.L().Warn("create system tray", zap.Error(err))
 	} else {
@@ -50,4 +50,17 @@ func (a *App) onClose(e *mygo.CloseEvent) {
 	}
 }
 
-func (a *App) post(fn func()) { a.window.Update(fn) }
+func (a *App) post(fn func()) {
+	a.window.Update(func() {
+		previous := a.settings.State().Value.Language
+		fn()
+		selected := a.settings.State().Value.Language
+		if previous != selected {
+			a.translator.SetLanguage(selected)
+			if a.tray != nil {
+				a.trayMenu.ItemByID("show").SetLabel(a.translator.T("tray.show"))
+				a.trayMenu.ItemByID("quit").SetLabel(a.translator.T("tray.quit"))
+			}
+		}
+	})
+}

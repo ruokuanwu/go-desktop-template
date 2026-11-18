@@ -12,7 +12,7 @@ func TestSettingsLoadDefaults(t *testing.T) {
 	dir := t.TempDir()
 	s := NewSettingsRepository(filepath.Join(dir, "settings.json"))
 	value, err := s.Load()
-	want := model.Settings{Theme: "system", Log: model.LogSettings{MaxAge: 7, Level: "info"}}
+	want := model.Settings{Language: "system", Theme: "system", Log: model.LogSettings{MaxAge: 7, Level: "info"}}
 	if err != nil || value != want {
 		t.Fatalf("load defaults: value=%+v, err=%v", value, err)
 	}
@@ -39,7 +39,7 @@ func TestSettingsLoadExistingPreferences(t *testing.T) {
 		t.Fatal(err)
 	}
 	value, err := NewSettingsRepository(path).Load()
-	want := model.Settings{Theme: "dark", CloseToTray: true, Log: model.LogSettings{MaxAge: 7, Level: "info"}}
+	want := model.Settings{Language: "system", Theme: "dark", CloseToTray: true, Log: model.LogSettings{MaxAge: 7, Level: "info"}}
 	if err != nil || value != want {
 		t.Fatalf("load existing preferences: value=%+v, err=%v", value, err)
 	}

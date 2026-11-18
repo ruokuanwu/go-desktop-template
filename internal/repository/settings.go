@@ -24,7 +24,7 @@ func (s *SettingsRepository) Load() (model.Settings, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	value := model.Settings{Theme: "system", Log: model.LogSettings{MaxAge: 7, Level: "info"}}
+	value := model.Settings{Language: "system", Theme: "system", Log: model.LogSettings{MaxAge: 7, Level: "info"}}
 	data, err := os.ReadFile(s.path)
 	if os.IsNotExist(err) {
 		return value, nil

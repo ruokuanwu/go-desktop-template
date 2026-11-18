@@ -1,6 +1,7 @@
 package model
 
 type Settings struct {
+	Language    string      `json:"language"`
 	Theme       string      `json:"theme"`
 	CloseToTray bool        `json:"close_to_tray"`
 	Log         LogSettings `json:"log"`

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	"go-desktop-template/internal/model"
@@ -49,6 +50,10 @@ func (s *SettingsStore) Close() { s.cancel() }
 // outside the UI thread so shutdown cannot block event processing.
 func (s *SettingsStore) Wait() { s.workers.Wait() }
 
+func (s *SettingsStore) SetLanguage(language string) {
+	s.saveValue(func(value *model.Settings) { value.Language = language })
+}
+
 func (s *SettingsStore) SetTheme(theme string) {
 	s.saveValue(func(value *model.Settings) { value.Theme = theme })
 }
@@ -81,6 +86,7 @@ func (s *SettingsStore) saveValue(change func(*model.Settings)) {
 			s.state.Busy = false
 			if err != nil {
 				s.state.Message = err.Error()
+				zap.L().Error("save settings", zap.Error(err))
 			} else {
 				s.state.Value = value
 			}
@@ -89,6 +95,11 @@ func (s *SettingsStore) saveValue(change func(*model.Settings)) {
 }
 
 func validateSettings(value model.Settings) error {
+	switch value.Language {
+	case "", "system", "zh-CN", "en":
+	default:
+		return fmt.Errorf("invalid language: %s", value.Language)
+	}
 	switch value.Theme {
 	case "system", "light", "dark":
 	default:

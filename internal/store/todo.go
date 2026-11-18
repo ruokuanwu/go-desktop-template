@@ -8,6 +8,8 @@ import (
 	"sync"
 	"unicode/utf8"
 
+	"go.uber.org/zap"
+
 	"go-desktop-template/internal/model"
 )
 
@@ -18,9 +20,10 @@ type TodoRepository interface {
 }
 
 type TodoState struct {
-	Items   []model.Todo
-	Busy    bool
-	Message string
+	Items     []model.Todo
+	Busy      bool
+	Message   string
+	MessageID string
 }
 
 // TodoStore owns UI state. Commands, State and Close run on the UI thread.
@@ -55,9 +58,10 @@ func (s *TodoStore) mutate(work func(context.Context) (func(), error), success f
 	}
 	if s.state.Busy {
 		s.state.Message = "正在保存任务，请稍后重试。"
+		s.state.MessageID = "error.busy"
 		return
 	}
-	s.state.Busy, s.state.Message = true, ""
+	s.state.Busy, s.state.Message, s.state.MessageID = true, "", ""
 	s.workers.Add(1)
 	go func() {
 		defer s.workers.Done()
@@ -69,9 +73,15 @@ func (s *TodoStore) mutate(work func(context.Context) (func(), error), success f
 			s.state.Busy = false
 			if err != nil {
 				s.state.Message = err.Error()
+				s.state.MessageID = "error.todo"
+				if errors.Is(err, errInvalidTitle) {
+					s.state.MessageID = "error.title"
+				} else {
+					zap.L().Error("save task", zap.Error(err))
+				}
 				return
 			}
-			s.state.Message = ""
+			s.state.Message, s.state.MessageID = "", ""
 			apply()
 			if success != nil {
 				success()
@@ -80,13 +90,15 @@ func (s *TodoStore) mutate(work func(context.Context) (func(), error), success f
 	}()
 }
 
+var errInvalidTitle = errors.New("todo title must contain 1–200 Unicode characters")
+
 // Add invokes success on the UI thread after publishing the persisted result.
 func (s *TodoStore) Add(title string, success func()) {
 	s.mutate(func(ctx context.Context) (func(), error) {
 		title = strings.TrimSpace(title)
 		length := utf8.RuneCountInString(title)
 		if !utf8.ValidString(title) || length < 1 || length > 200 {
-			return nil, errors.New("todo title must contain 1–200 Unicode characters")
+			return nil, errInvalidTitle
 		}
 		created, err := s.repo.Create(ctx, title)
 		if err != nil {

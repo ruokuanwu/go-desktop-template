@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"go-desktop-template/internal/db"
+	"go-desktop-template/internal/pkg/i18n"
 	"go-desktop-template/internal/pkg/logger"
 	"go-desktop-template/internal/repository"
 	"go-desktop-template/internal/store"
@@ -19,6 +20,8 @@ import (
 
 // App owns the window, stores and resources for one application lifetime.
 type App struct {
+	translator         *i18n.Translator
+	trayMenu           *mygo.Menu
 	window             *mygo.Window
 	tray               *mygo.Tray
 	todos              *store.TodoStore
@@ -54,6 +57,10 @@ func Run() (runErr error) {
 	defer func() { runErr = errors.Join(runErr, closeLogger()) }()
 	restoreLogger := zap.ReplaceGlobals(log)
 	defer restoreLogger()
+	a.translator, err = i18n.New(preferences.Language)
+	if err != nil {
+		return err
+	}
 	dataPath := filepath.Join(base, "data.db")
 	a.database, err = db.Open(dataPath)
 	if err != nil {
