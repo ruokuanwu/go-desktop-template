@@ -19,6 +19,9 @@ func (a *App) ready() {
 		Title: "Todo Desktop", Width: 1000, Height: 720,
 		MinWidth: 720, MinHeight: 520,
 		StateKey: "main", Content: ui.View(func(c *ui.Context) { screen.Render(c) }),
+		// TitleBarStyle: mygo.TitleBarHidden,
+		// // As tall as the edge over a page (Linux, Windows).
+		// // TitleBarHeight: 46,
 	})
 	screen = view.NewView(a.todos, a.settings, a.translator)
 	a.window.OnClosed(func() {

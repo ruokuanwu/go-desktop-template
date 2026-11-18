@@ -1,6 +1,8 @@
 package view
 
 import (
+	"strings"
+
 	"github.com/egoist/mygo/ui"
 
 	"go-desktop-template/internal/pkg/i18n"
@@ -12,7 +14,7 @@ import (
 type View struct {
 	translator   *i18n.Translator
 	settings     *store.SettingsStore
-	page         string
+	router       *ui.Router
 	tasks        pages.TodoPage
 	dashboard    pages.DashboardPage
 	settingsPage pages.SettingsPage
@@ -22,11 +24,11 @@ func NewView(todos *store.TodoStore, settings *store.SettingsStore, translator *
 	v := &View{
 		settings:     settings,
 		translator:   translator,
-		page:         "todos",
+		router:       ui.NewRouter("/todos"),
 		tasks:        pages.NewTodoPage(todos),
 		settingsPage: pages.NewSettingsPage(settings),
 	}
-	v.dashboard = pages.NewDashboardPage(todos, func() { v.page = "todos" })
+	v.dashboard = pages.NewDashboardPage(todos, func() { v.router.Push("/todos") })
 	return v
 }
 
@@ -40,14 +42,21 @@ func (v *View) Render(c *ui.Context) {
 	default:
 		linearTheme.Apply(c)
 	}
-	layouts.Shell(c, v.translator, v.page, func(page string) { v.page = page }, func() {
-		switch v.page {
-		case "dashboard":
-			v.dashboard.Render(c, v.translator)
-		case "settings":
-			v.settingsPage.Render(c, v.translator)
-		default:
-			v.tasks.Render(c, v.translator)
-		}
+	page := strings.TrimPrefix(v.router.Path(), "/")
+	layouts.Shell(c, v.translator, page, func(page string) { v.router.Push("/" + page) }, func() {
+		v.router.View(c, func(r *ui.Route) {
+			r.Page().Gap(20)
+			switch {
+			case r.Match("/dashboard"):
+				r.Title(v.translator.T("nav.dashboard"))
+				v.dashboard.Render(c, v.translator)
+			case r.Match("/settings"):
+				r.Title(v.translator.T("nav.settings"))
+				v.settingsPage.Render(c, v.translator)
+			case r.Match("/todos"):
+				r.Title(v.translator.T("nav.todos"))
+				v.tasks.Render(c, v.translator)
+			}
+		})
 	})
 }
