@@ -1,4 +1,4 @@
-package view
+package ui
 
 import (
 	"strings"
@@ -7,8 +7,8 @@ import (
 
 	"go-desktop-template/internal/pkg/i18n"
 	"go-desktop-template/internal/store"
-	"go-desktop-template/internal/view/layouts"
-	"go-desktop-template/internal/view/pages"
+	"go-desktop-template/internal/ui/layouts"
+	"go-desktop-template/internal/ui/pages"
 )
 
 type View struct {

@@ -10,7 +10,7 @@ import (
 
 	"go-desktop-template/internal/pkg/i18n"
 	"go-desktop-template/internal/store"
-	"go-desktop-template/internal/view/components"
+	"go-desktop-template/internal/ui/components"
 )
 
 type TodoPage struct {

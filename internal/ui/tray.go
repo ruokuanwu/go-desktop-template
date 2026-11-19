@@ -1,4 +1,4 @@
-package app
+package ui
 
 import (
 	"github.com/egoist/mygo"
@@ -22,4 +22,9 @@ func newTray(opts trayOptions, tr *i18n.Translator) (*mygo.Tray, *mygo.Menu, err
 		ToolTip: "Todo Desktop", Menu: menu,
 	})
 	return tray, menu, err
+}
+
+func (d *Desktop) updateTrayLabels() {
+	d.trayMenu.ItemByID("show").SetLabel(d.translator.T("tray.show"))
+	d.trayMenu.ItemByID("quit").SetLabel(d.translator.T("tray.quit"))
 }

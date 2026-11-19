@@ -8,82 +8,114 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/egoist/mygo"
 	"go.uber.org/zap"
 
 	"go-desktop-template/internal/db"
-	"go-desktop-template/internal/pkg/i18n"
 	"go-desktop-template/internal/pkg/logger"
 	"go-desktop-template/internal/repository"
 	"go-desktop-template/internal/store"
+	"go-desktop-template/internal/ui"
 )
 
-// App owns the window, stores and resources for one application lifetime.
+// App owns the desktop, stores and persistence resources for one application lifetime.
 type App struct {
-	translator         *i18n.Translator
-	trayMenu           *mygo.Menu
-	window             *mygo.Window
-	tray               *mygo.Tray
-	todos              *store.TodoStore
-	settings           *store.SettingsStore
-	database           *sql.DB
-	todoRepository     *repository.TodoRepository
-	settingsRepository *repository.SettingsRepository
-	quitting           bool
+	desktop  *ui.Desktop
+	todos    *store.TodoStore
+	settings *store.SettingsStore
+	database *sql.DB
+	closeLog func() error
 }
 
 func Run() (runErr error) {
+	a, err := newApp()
+	if err != nil {
+		return err
+	}
+	defer func() { runErr = errors.Join(runErr, a.close()) }()
+	return a.desktop.Run(a.stop)
+}
+
+func newApp() (*App, error) {
+	var desktop *ui.Desktop
+	// Stores only post results from commands issued after the desktop opens.
+	a, err := openResources(func(fn func()) { desktop.Post(fn) })
+	if err != nil {
+		return nil, err
+	}
+	desktop = ui.NewDesktop(a.todos, a.settings)
+	a.desktop = desktop
+	return a, nil
+}
+
+func openResources(post func(func())) (_ *App, openErr error) {
 	base, err := os.UserConfigDir()
 	if err != nil {
-		return fmt.Errorf("resolve user configuration directory: %w", err)
+		return nil, fmt.Errorf("resolve user configuration directory: %w", err)
 	}
 	base = filepath.Join(base, "go-desktop-template")
 
 	a := &App{}
-	a.settingsRepository = repository.NewSettingsRepository(filepath.Join(base, "settings.json"))
-	preferences, err := a.settingsRepository.Load()
+	defer func() {
+		if openErr != nil {
+			openErr = errors.Join(openErr, a.close())
+		}
+	}()
+
+	settingsRepo := repository.NewSettingsRepository(filepath.Join(base, "settings.json"))
+	preferences, err := settingsRepo.Load()
 	if err != nil {
-		return fmt.Errorf("load settings: %w", err)
+		return nil, fmt.Errorf("load settings: %w", err)
 	}
-	a.settings, err = store.NewSettingsStore(a.settingsRepository, preferences, a.post)
+	a.settings, err = store.NewSettingsStore(settingsRepo, preferences, post)
 	if err != nil {
-		return fmt.Errorf("validate settings: %w", err)
+		return nil, fmt.Errorf("validate settings: %w", err)
 	}
-	defer func() { a.settings.Close(); a.settings.Wait() }()
 	log, closeLogger, err := logger.New(filepath.Join(base, "logs"), preferences.Log)
 	if err != nil {
-		return fmt.Errorf("initialize logger: %w", err)
+		return nil, fmt.Errorf("initialize logger: %w", err)
 	}
-	defer func() { runErr = errors.Join(runErr, closeLogger()) }()
 	restoreLogger := zap.ReplaceGlobals(log)
-	defer restoreLogger()
-	a.translator, err = i18n.New(preferences.Language)
-	if err != nil {
-		return err
+	a.closeLog = func() error {
+		restoreLogger()
+		return closeLogger()
 	}
-	dataPath := filepath.Join(base, "data.db")
-	a.database, err = db.Open(dataPath)
+	a.database, err = db.Open(filepath.Join(base, "data.db"))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer a.database.Close()
-	a.todoRepository = repository.NewTodoRepository(a.database)
-	items, err := a.todoRepository.List(context.Background())
+	todoRepo := repository.NewTodoRepository(a.database)
+	items, err := todoRepo.List(context.Background())
 	if err != nil {
-		return fmt.Errorf("load todos: %w", err)
+		return nil, fmt.Errorf("load todos: %w", err)
 	}
-	a.todos = store.NewTodoStore(a.todoRepository, items, a.post)
-	defer func() {
+	a.todos = store.NewTodoStore(todoRepo, items, post)
+	return a, nil
+}
+
+// stop cancels store work without waiting. While the UI runs, call it on the UI thread.
+func (a *App) stop() {
+	if a.todos != nil {
 		a.todos.Close()
-		a.todos.Wait()
-	}()
-	mygo.App.WhenReady(a.ready)
-	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
-		a.quitting = true
-	})
-	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
-		a.todos.Close()
+	}
+	if a.settings != nil {
 		a.settings.Close()
-	})
-	return mygo.App.Run()
+	}
+}
+
+// close waits for store workers before releasing their resources. Call it after the UI loop returns or setup fails.
+func (a *App) close() (err error) {
+	a.stop()
+	if a.todos != nil {
+		a.todos.Wait()
+	}
+	if a.settings != nil {
+		a.settings.Wait()
+	}
+	if a.database != nil {
+		err = a.database.Close()
+	}
+	if a.closeLog != nil {
+		err = errors.Join(err, a.closeLog())
+	}
+	return err
 }

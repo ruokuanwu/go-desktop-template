@@ -1,4 +1,4 @@
-package view
+package ui
 
 import (
 	"github.com/egoist/mygo/ui"
